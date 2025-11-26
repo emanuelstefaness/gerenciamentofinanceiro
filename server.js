@@ -729,6 +729,354 @@ app.get('/api/comparar-meses', authenticateToken, (req, res) => {
     });
 });
 
+// ========== ROTAS DE IA ==========
+const OpenAI = require('openai');
+
+// Inicializar OpenAI (opcional - funciona sem chave também com análise local)
+let openai = null;
+if (process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+    });
+}
+
+// Análise inteligente de gastos
+app.post('/api/ia/analise', authenticateToken, async (req, res) => {
+    const { periodo, tipo } = req.body;
+    const mesAtual = periodo || new Date().toISOString().slice(0, 7);
+    
+    try {
+        // Buscar dados do período
+        const promises = [
+            new Promise((resolve) => {
+                db.all("SELECT * FROM arrecadacao WHERE strftime('%Y-%m', data) = ? ORDER BY data DESC", [mesAtual], (err, rows) => {
+                    resolve(rows || []);
+                });
+            }),
+            new Promise((resolve) => {
+                db.all("SELECT * FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1", [mesAtual], (err, rows) => {
+                    resolve(rows || []);
+                });
+            }),
+            new Promise((resolve) => {
+                db.all("SELECT * FROM contas_diarias WHERE strftime('%Y-%m', data) = ? ORDER BY data DESC", [mesAtual], (err, rows) => {
+                    resolve(rows || []);
+                });
+            })
+        ];
+        
+        const [arrecadacao, fixas, diarias] = await Promise.all(promises);
+        
+        // Calcular totais
+        const totalArrecadado = arrecadacao.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+        const totalFixas = fixas.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+        const totalDiarias = diarias.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+        const totalGastos = totalFixas + totalDiarias;
+        const lucro = totalArrecadado - totalGastos;
+        
+        // Análise local inteligente (sem necessidade de API)
+        const analise = gerarAnaliseLocal(arrecadacao, fixas, diarias, totalArrecadado, totalGastos, lucro);
+        
+        // Se tiver chave OpenAI, fazer análise avançada
+        if (openai && tipo === 'avancada') {
+            try {
+                const prompt = criarPromptAnalise(arrecadacao, fixas, diarias, totalArrecadado, totalGastos, lucro);
+                const completion = await openai.chat.completions.create({
+                    model: "gpt-3.5-turbo",
+                    messages: [
+                        {
+                            role: "system",
+                            content: "Você é um consultor financeiro especializado em restaurantes. Analise os dados e forneça insights práticos e acionáveis."
+                        },
+                        {
+                            role: "user",
+                            content: prompt
+                        }
+                    ],
+                    max_tokens: 500,
+                    temperature: 0.7
+                });
+                
+                analise.iaAvancada = completion.choices[0].message.content;
+            } catch (error) {
+                console.error('Erro ao chamar OpenAI:', error);
+                analise.erroIA = 'Análise avançada temporariamente indisponível. Usando análise local.';
+            }
+        }
+        
+        res.json(analise);
+    } catch (error) {
+        console.error('Erro na análise:', error);
+        res.status(500).json({ error: 'Erro ao gerar análise' });
+    }
+});
+
+// Assistente virtual - chat com IA
+app.post('/api/ia/chat', authenticateToken, async (req, res) => {
+    const { pergunta } = req.body;
+    
+    if (!pergunta) {
+        return res.status(400).json({ error: 'Pergunta é obrigatória' });
+    }
+    
+    try {
+        // Buscar contexto financeiro atual
+        const mesAtual = new Date().toISOString().slice(0, 7);
+        const contexto = await buscarContextoFinanceiro(mesAtual);
+        
+        if (openai) {
+            // Usar OpenAI para resposta inteligente
+            const completion = await openai.chat.completions.create({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    {
+                        role: "system",
+                        content: `Você é um assistente financeiro especializado em restaurantes. 
+                        Analise os dados financeiros fornecidos e responda perguntas de forma clara e prática.
+                        Contexto atual: ${JSON.stringify(contexto)}`
+                    },
+                    {
+                        role: "user",
+                        content: pergunta
+                    }
+                ],
+                max_tokens: 300,
+                temperature: 0.7
+            });
+            
+            res.json({ resposta: completion.choices[0].message.content });
+        } else {
+            // Resposta local inteligente
+            const resposta = gerarRespostaLocal(pergunta, contexto);
+            res.json({ resposta });
+        }
+    } catch (error) {
+        console.error('Erro no chat:', error);
+        res.status(500).json({ error: 'Erro ao processar pergunta' });
+    }
+});
+
+// Recomendações inteligentes
+app.get('/api/ia/recomendacoes', authenticateToken, async (req, res) => {
+    const { mes } = req.query;
+    const mesAtual = mes || new Date().toISOString().slice(0, 7);
+    
+    try {
+        const contexto = await buscarContextoFinanceiro(mesAtual);
+        const recomendacoes = gerarRecomendacoes(contexto);
+        res.json(recomendacoes);
+    } catch (error) {
+        console.error('Erro nas recomendações:', error);
+        res.status(500).json({ error: 'Erro ao gerar recomendações' });
+    }
+});
+
+// Funções auxiliares
+function gerarAnaliseLocal(arrecadacao, fixas, diarias, totalArrecadado, totalGastos, lucro) {
+    const analise = {
+        periodo: new Date().toISOString().slice(0, 7),
+        resumo: {
+            arrecadado: totalArrecadado,
+            gastos: totalGastos,
+            lucro: lucro,
+            margem: totalArrecadado > 0 ? ((lucro / totalArrecadado) * 100).toFixed(2) : 0
+        },
+        insights: [],
+        alertas: [],
+        tendencias: []
+    };
+    
+    // Insights
+    if (lucro < 0) {
+        analise.insights.push({
+            tipo: 'alerta',
+            titulo: 'Prejuízo Detectado',
+            descricao: `O restaurante está com prejuízo de ${formatCurrency(Math.abs(lucro))}. É necessário revisar gastos ou aumentar arrecadação.`
+        });
+    } else if (lucro < totalArrecadado * 0.1) {
+        analise.insights.push({
+            tipo: 'atencao',
+            titulo: 'Margem Baixa',
+            descricao: `A margem de lucro está em ${analise.resumo.margem}%, abaixo do recomendado (10-15%).`
+        });
+    } else {
+        analise.insights.push({
+            tipo: 'sucesso',
+            titulo: 'Lucro Saudável',
+            descricao: `Excelente! Margem de lucro de ${analise.resumo.margem}%.`
+        });
+    }
+    
+    // Maior gasto
+    const todosGastos = [...fixas, ...diarias];
+    if (todosGastos.length > 0) {
+        const maiorGasto = todosGastos.reduce((max, item) => 
+            parseFloat(item.valor) > parseFloat(max.valor) ? item : max
+        );
+        analise.insights.push({
+            tipo: 'info',
+            titulo: 'Maior Gasto',
+            descricao: `${maiorGasto.nome}: ${formatCurrency(maiorGasto.valor)}`
+        });
+    }
+    
+    // Análise de frequência de gastos
+    const gastosPorNome = {};
+    diarias.forEach(item => {
+        const nome = item.nome.toLowerCase();
+        if (!gastosPorNome[nome]) {
+            gastosPorNome[nome] = { total: 0, vezes: 0 };
+        }
+        gastosPorNome[nome].total += parseFloat(item.valor);
+        gastosPorNome[nome].vezes++;
+    });
+    
+    const maisFrequente = Object.entries(gastosPorNome)
+        .sort((a, b) => b[1].vezes - a[1].vezes)[0];
+    
+    if (maisFrequente && maisFrequente[1].vezes > 3) {
+        analise.insights.push({
+            tipo: 'info',
+            titulo: 'Gasto Mais Frequente',
+            descricao: `${maisFrequente[0]} aparece ${maisFrequente[1].vezes} vezes no mês, totalizando ${formatCurrency(maisFrequente[1].total)}`
+        });
+    }
+    
+    // Alertas
+    if (totalGastos > totalArrecadado * 0.9) {
+        analise.alertas.push({
+            nivel: 'alto',
+            mensagem: 'Gastos muito próximos da arrecadação. Risco de prejuízo.'
+        });
+    }
+    
+    if (diarias.length === 0 && fixas.length === 0) {
+        analise.alertas.push({
+            nivel: 'info',
+            mensagem: 'Nenhum gasto registrado este mês. Verifique se todos foram lançados.'
+        });
+    }
+    
+    return analise;
+}
+
+function formatCurrency(value) {
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    }).format(value);
+}
+
+async function buscarContextoFinanceiro(mes) {
+    return new Promise((resolve) => {
+        const contexto = {};
+        
+        db.get("SELECT COALESCE(SUM(valor), 0) as total FROM arrecadacao WHERE strftime('%Y-%m', data) = ?", [mes], (err, row) => {
+            contexto.arrecadado = row.total;
+            
+            db.get("SELECT COALESCE(SUM(valor), 0) as total FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1", [mes], (err, row) => {
+                contexto.fixas = row.total;
+                
+                db.get("SELECT COALESCE(SUM(valor), 0) as total FROM contas_diarias WHERE strftime('%Y-%m', data) = ?", [mes], (err, row) => {
+                    contexto.diarias = row.total;
+                    contexto.totalGastos = contexto.fixas + contexto.diarias;
+                    contexto.lucro = contexto.arrecadado - contexto.totalGastos;
+                    resolve(contexto);
+                });
+            });
+        });
+    });
+}
+
+function gerarRecomendacoes(contexto) {
+    const recomendacoes = [];
+    
+    if (contexto.lucro < 0) {
+        recomendacoes.push({
+            prioridade: 'alta',
+            titulo: 'Reduzir Gastos',
+            descricao: 'Considere revisar gastos desnecessários ou negociar melhores preços com fornecedores.',
+            acao: 'Revisar contas fixas e diárias'
+        });
+    }
+    
+    if (contexto.diarias > contexto.fixas * 2) {
+        recomendacoes.push({
+            prioridade: 'media',
+            titulo: 'Gastos Diários Elevados',
+            descricao: 'Gastos diários estão muito altos. Considere criar mais contas fixas para melhor planejamento.',
+            acao: 'Analisar gastos diários recorrentes'
+        });
+    }
+    
+    if (contexto.arrecadado > 0 && (contexto.totalGastos / contexto.arrecadado) > 0.8) {
+        recomendacoes.push({
+            prioridade: 'alta',
+            titulo: 'Margem de Segurança Baixa',
+            descricao: 'Gastos representam mais de 80% da arrecadação. Risco alto de prejuízo.',
+            acao: 'Aumentar arrecadação ou reduzir custos'
+        });
+    }
+    
+    if (recomendacoes.length === 0) {
+        recomendacoes.push({
+            prioridade: 'baixa',
+            titulo: 'Situação Financeira Saudável',
+            descricao: 'Continue mantendo o controle e registrando todos os gastos.',
+            acao: 'Manter o bom trabalho!'
+        });
+    }
+    
+    return recomendacoes;
+}
+
+function criarPromptAnalise(arrecadacao, fixas, diarias, totalArrecadado, totalGastos, lucro) {
+    return `Analise os dados financeiros de um restaurante:
+
+ARRECADAÇÃO TOTAL: R$ ${totalArrecadado.toFixed(2)}
+GASTOS TOTAIS: R$ ${totalGastos.toFixed(2)}
+LUCRO: R$ ${lucro.toFixed(2)}
+
+CONTAS FIXAS (${fixas.length} itens):
+${fixas.map(f => `- ${f.nome}: R$ ${f.valor}`).join('\n')}
+
+GASTOS DIÁRIOS (${diarias.length} itens):
+${diarias.slice(0, 10).map(d => `- ${d.nome}: R$ ${d.valor}${d.descricao ? ' (' + d.descricao + ')' : ''}`).join('\n')}
+
+Forneça uma análise financeira prática com:
+1. Pontos fortes
+2. Pontos de atenção
+3. Recomendações específicas para restaurantes
+4. Previsão para o próximo mês (se possível)
+
+Seja objetivo e prático.`;
+}
+
+function gerarRespostaLocal(pergunta, contexto) {
+    const perguntaLower = pergunta.toLowerCase();
+    
+    if (perguntaLower.includes('lucro') || perguntaLower.includes('lucrar')) {
+        return `O lucro atual é de ${formatCurrency(contexto.lucro)}. ${contexto.lucro > 0 ? 'Situação positiva!' : 'Atenção: há prejuízo.'}`;
+    }
+    
+    if (perguntaLower.includes('gasto') || perguntaLower.includes('despesa')) {
+        return `Os gastos totais são de ${formatCurrency(contexto.totalGastos)}, sendo ${formatCurrency(contexto.fixas)} em contas fixas e ${formatCurrency(contexto.diarias)} em gastos diários.`;
+    }
+    
+    if (perguntaLower.includes('arrecadação') || perguntaLower.includes('receita')) {
+        return `A arrecadação total é de ${formatCurrency(contexto.arrecadado)}.`;
+    }
+    
+    if (perguntaLower.includes('recomendação') || perguntaLower.includes('sugestão')) {
+        if (contexto.lucro < 0) {
+            return 'Recomendo revisar os gastos, especialmente os diários, e considerar aumentar a arrecadação.';
+        }
+        return 'Continue mantendo o controle financeiro. Considere criar mais contas fixas para melhor planejamento.';
+    }
+    
+    return 'Analisando seus dados financeiros... Para uma análise mais detalhada, acesse a seção de Análise com IA no dashboard.';
+}
+
 // Rota raiz
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));

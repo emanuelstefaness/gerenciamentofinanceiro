@@ -136,6 +136,9 @@
                 <a href="#" data-page="configuracoes" class="nav-item">
                     <span>⚙️</span> Configurações
                 </a>
+                <a href="#" data-page="ia" class="nav-item">
+                    <span>🤖</span> Assistente IA
+                </a>
             </nav>
             <div class="sidebar-footer">
                 <p id="currentUser">Usuário: <span></span></p>
@@ -378,6 +381,36 @@
                         </thead>
                         <tbody></tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Assistente IA -->
+            <div id="ia" class="page">
+                <h1>🤖 Assistente de IA</h1>
+                <div class="ia-container">
+                    <div class="card">
+                        <h3>Análise Inteligente</h3>
+                        <p>Obtenha insights automáticos sobre suas finanças</p>
+                        <button class="btn btn-primary" onclick="gerarAnaliseIA()">📊 Gerar Análise</button>
+                        <div id="analiseResultado" class="ia-resultado" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Chat com Assistente</h3>
+                        <div class="chat-container">
+                            <div id="chatMessages" class="chat-messages"></div>
+                            <div class="chat-input-container">
+                                <input type="text" id="chatInput" placeholder="Pergunte algo sobre suas finanças..." class="chat-input">
+                                <button class="btn btn-primary" onclick="enviarPerguntaIA()">Enviar</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Recomendações Inteligentes</h3>
+                        <button class="btn btn-secondary" onclick="carregarRecomendacoes()">🔄 Atualizar Recomendações</button>
+                        <div id="recomendacoesContainer" class="recomendacoes-container"></div>
+                    </div>
                 </div>
             </div>
 

@@ -246,6 +246,9 @@ function showPage(pageName) {
         case 'configuracoes':
             loadLogs();
             break;
+        case 'ia':
+            carregarRecomendacoes();
+            break;
     }
 }
 
