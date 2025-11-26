@@ -1296,6 +1296,182 @@ async function loadMobileRecentGastos() {
     }
 }
 
+// ========== FUNÇÕES DE IA ==========
+
+// Gerar análise com IA
+async function gerarAnaliseIA() {
+    const resultado = document.getElementById('analiseResultado');
+    if (!resultado) return;
+    resultado.style.display = 'block';
+    resultado.innerHTML = '<p>⏳ Analisando dados financeiros...</p>';
+    
+    try {
+        const response = await apiRequest('/ia/analise', {
+            method: 'POST',
+            body: JSON.stringify({
+                periodo: document.getElementById('dashboardMonth')?.value || new Date().toISOString().slice(0, 7),
+                tipo: 'basica'
+            })
+        });
+        
+        const analise = await response.json();
+        
+        let html = `
+            <h3>Análise do Período: ${analise.periodo}</h3>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1rem 0;">
+                <div><strong>Arrecadado:</strong> ${formatCurrency(analise.resumo.arrecadado)}</div>
+                <div><strong>Gastos:</strong> ${formatCurrency(analise.resumo.gastos)}</div>
+                <div><strong>Lucro:</strong> ${formatCurrency(analise.resumo.lucro)}</div>
+            </div>
+            <div><strong>Margem:</strong> ${analise.resumo.margem}%</div>
+        `;
+        
+        if (analise.insights && analise.insights.length > 0) {
+            html += '<h4 style="margin-top: 1.5rem;">Insights:</h4>';
+            analise.insights.forEach(insight => {
+                html += `
+                    <div class="ia-insight ${insight.tipo}">
+                        <strong>${insight.titulo}</strong>
+                        <p>${insight.descricao}</p>
+                    </div>
+                `;
+            });
+        }
+        
+        if (analise.alertas && analise.alertas.length > 0) {
+            html += '<h4 style="margin-top: 1.5rem;">Alertas:</h4>';
+            analise.alertas.forEach(alerta => {
+                html += `
+                    <div class="ia-insight ${alerta.nivel === 'alto' ? 'alerta' : 'atencao'}">
+                        <p>${alerta.mensagem}</p>
+                    </div>
+                `;
+            });
+        }
+        
+        if (analise.iaAvancada) {
+            html += `
+                <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(79, 70, 229, 0.1); border-radius: 8px;">
+                    <h4>Análise Avançada com IA:</h4>
+                    <p style="white-space: pre-wrap;">${analise.iaAvancada}</p>
+                </div>
+            `;
+        }
+        
+        resultado.innerHTML = html;
+    } catch (error) {
+        console.error('Erro ao gerar análise:', error);
+        resultado.innerHTML = '<p style="color: var(--danger-color);">Erro ao gerar análise. Tente novamente.</p>';
+    }
+}
+
+// Chat com IA
+async function enviarPerguntaIA() {
+    const input = document.getElementById('chatInput');
+    if (!input) return;
+    const pergunta = input.value.trim();
+    
+    if (!pergunta) return;
+    
+    // Adicionar pergunta do usuário
+    adicionarMensagemChat('user', pergunta);
+    input.value = '';
+    
+    // Adicionar mensagem de carregamento
+    const loadingId = adicionarMensagemChat('assistant', '⏳ Pensando...');
+    
+    try {
+        const response = await apiRequest('/ia/chat', {
+            method: 'POST',
+            body: JSON.stringify({ pergunta })
+        });
+        
+        const data = await response.json();
+        
+        // Remover loading e adicionar resposta
+        removerMensagemChat(loadingId);
+        adicionarMensagemChat('assistant', data.resposta);
+    } catch (error) {
+        console.error('Erro no chat:', error);
+        removerMensagemChat(loadingId);
+        adicionarMensagemChat('assistant', 'Desculpe, ocorreu um erro. Tente novamente.');
+    }
+}
+
+function adicionarMensagemChat(tipo, texto) {
+    const container = document.getElementById('chatMessages');
+    if (!container) return null;
+    const id = 'msg-' + Date.now();
+    const messageDiv = document.createElement('div');
+    messageDiv.id = id;
+    messageDiv.className = `chat-message ${tipo}`;
+    messageDiv.textContent = texto;
+    container.appendChild(messageDiv);
+    container.scrollTop = container.scrollHeight;
+    return id;
+}
+
+function removerMensagemChat(id) {
+    const msg = document.getElementById(id);
+    if (msg) msg.remove();
+}
+
+// Carregar recomendações
+async function carregarRecomendacoes() {
+    const container = document.getElementById('recomendacoesContainer');
+    if (!container) return;
+    
+    container.innerHTML = '<p>⏳ Carregando recomendações...</p>';
+    
+    try {
+        const mes = document.getElementById('dashboardMonth')?.value || new Date().toISOString().slice(0, 7);
+        const response = await apiRequest(`/ia/recomendacoes?mes=${mes}`);
+        const recomendacoes = await response.json();
+        
+        if (recomendacoes.length === 0) {
+            container.innerHTML = '<p>Nenhuma recomendação no momento.</p>';
+            return;
+        }
+        
+        container.innerHTML = recomendacoes.map(rec => `
+            <div class="recomendacao ${rec.prioridade}">
+                <div class="recomendacao-titulo">
+                    ${rec.prioridade === 'alta' ? '🔴' : rec.prioridade === 'media' ? '🟡' : '🟢'}
+                    ${rec.titulo}
+                </div>
+                <div class="recomendacao-desc">${rec.descricao}</div>
+                <div class="recomendacao-acao">💡 ${rec.acao}</div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Erro ao carregar recomendações:', error);
+        container.innerHTML = '<p style="color: var(--danger-color);">Erro ao carregar recomendações.</p>';
+    }
+}
+
+// Permitir Enter no chat
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        const chatInput = document.getElementById('chatInput');
+        if (chatInput) {
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    enviarPerguntaIA();
+                }
+            });
+        }
+    });
+} else {
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                enviarPerguntaIA();
+            }
+        });
+    }
+}
+
 // Fechar modal ao clicar fora
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
