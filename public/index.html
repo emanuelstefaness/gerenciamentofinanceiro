@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão Financeira - Restaurante</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <!-- Tela de Login -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-box">
+            <h1>Gestão Financeira</h1>
+            <h2>Restaurante</h2>
+            <form id="loginForm">
+                <input type="text" id="username" placeholder="Usuário" required>
+                <input type="password" id="password" placeholder="Senha" required>
+                <button type="submit">Entrar</button>
+                <p id="loginError" class="error-message"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Interface Principal -->
+    <div id="mainApp" class="main-app" style="display: none;">
+        <!-- Tela Mobile Simplificada para Gastos Diários -->
+        <div id="mobileQuickAdd" class="mobile-quick-add" style="display: none;">
+            <div class="mobile-header">
+                <h1>💰 Lançar Gasto</h1>
+                <button id="mobileMenuBtn" class="mobile-menu-btn">☰</button>
+            </div>
+            <div class="mobile-form-container">
+                <form id="mobileQuickForm" class="mobile-quick-form">
+                    <div class="form-group-mobile">
+                        <label>O que foi comprado?</label>
+                        <input type="text" id="mobileNome" placeholder="Ex: Maracujá, Carne, Verduras..." required autocomplete="off" list="sugestoes-nomes">
+                        <datalist id="sugestoes-nomes">
+                            <option value="Maracujá">
+                            <option value="Carne">
+                            <option value="Verduras">
+                            <option value="Frutas">
+                            <option value="Limpeza">
+                            <option value="Bebidas">
+                            <option value="Pão">
+                            <option value="Queijo">
+                            <option value="Temperos">
+                            <option value="Óleo">
+                        </datalist>
+                    </div>
+                    <div class="form-group-mobile">
+                        <label>Quanto custou? (R$)</label>
+                        <input type="number" id="mobileValor" step="0.01" placeholder="0,00" required min="0.01">
+                    </div>
+                    <div class="form-group-mobile">
+                        <label>Descrição (opcional)</label>
+                        <textarea id="mobileDescricao" placeholder="Ex: Compra de maracujá para sucos..." rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="mobile-submit-btn">
+                        <span class="btn-icon">✓</span>
+                        <span class="btn-text">Salvar Gasto</span>
+                    </button>
+                </form>
+                <div id="mobileSuccess" class="mobile-success" style="display: none;">
+                    <div class="success-icon">✓</div>
+                    <h2>Gasto salvo com sucesso!</h2>
+                    <p id="mobileSuccessMsg"></p>
+                    <button onclick="resetMobileForm()" class="mobile-new-btn">Lançar outro gasto</button>
+                </div>
+            </div>
+            <div class="mobile-recent">
+                <h3>Últimos gastos de hoje</h3>
+                <div id="mobileRecentList" class="mobile-recent-list"></div>
+            </div>
+        </div>
+
+        <!-- Menu Mobile (oculto por padrão) -->
+        <div id="mobileMenu" class="mobile-menu" style="display: none;">
+            <div class="mobile-menu-header">
+                <h2>Menu</h2>
+                <button id="mobileMenuClose" class="mobile-menu-close">✕</button>
+            </div>
+            <nav class="mobile-menu-nav">
+                <a href="#" data-page="mobile-quick" class="mobile-menu-item active">
+                    <span>💰</span> Lançar Gasto
+                </a>
+                <a href="#" data-page="contas-diarias" class="mobile-menu-item">
+                    <span>📝</span> Ver Gastos
+                </a>
+                <a href="#" data-page="dashboard" class="mobile-menu-item">
+                    <span>📊</span> Dashboard
+                </a>
+                <a href="#" data-page="arrecadacao" class="mobile-menu-item">
+                    <span>💵</span> Arrecadação
+                </a>
+                <a href="#" data-page="relatorios" class="mobile-menu-item">
+                    <span>📈</span> Relatórios
+                </a>
+                <a href="#" data-page="configuracoes" class="mobile-menu-item">
+                    <span>⚙️</span> Configurações
+                </a>
+                <button id="mobileLogoutBtn" class="mobile-logout-btn">Sair</button>
+            </nav>
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>💰 Gestão Financeira</h2>
+                <button id="toggleTheme" class="theme-toggle">🌙</button>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" data-page="dashboard" class="nav-item active">
+                    <span>📊</span> Dashboard
+                </a>
+                <a href="#" data-page="arrecadacao" class="nav-item">
+                    <span>💵</span> Arrecadação
+                </a>
+                <a href="#" data-page="gastos" class="nav-item">
+                    <span>💸</span> Gastos
+                </a>
+                <a href="#" data-page="contas-fixas" class="nav-item">
+                    <span>📅</span> Contas Fixas
+                </a>
+                <a href="#" data-page="contas-semanais" class="nav-item">
+                    <span>📆</span> Contas Semanais
+                </a>
+                <a href="#" data-page="contas-diarias" class="nav-item">
+                    <span>📝</span> Contas Diárias
+                </a>
+                <a href="#" data-page="relatorios" class="nav-item">
+                    <span>📈</span> Relatórios
+                </a>
+                <a href="#" data-page="configuracoes" class="nav-item">
+                    <span>⚙️</span> Configurações
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <p id="currentUser">Usuário: <span></span></p>
+                <button id="logoutBtn" class="logout-btn">Sair</button>
+            </div>
+        </aside>
+
+        <!-- Conteúdo Principal -->
+        <main class="main-content">
+            <!-- Dashboard -->
+            <div id="dashboard" class="page active">
+                <h1>Dashboard</h1>
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h3>Total Arrecadado (Mês)</h3>
+                        <p class="big-number" id="totalArrecadado">R$ 0,00</p>
+                    </div>
+                    <div class="card">
+                        <h3>Total Gasto (Mês)</h3>
+                        <p class="big-number negative" id="totalGasto">R$ 0,00</p>
+                    </div>
+                    <div class="card">
+                        <h3>Lucro Líquido</h3>
+                        <p class="big-number" id="lucroLiquido">R$ 0,00</p>
+                    </div>
+                    <div class="card">
+                        <h3>Mês de Referência</h3>
+                        <input type="month" id="dashboardMonth" class="month-selector">
+                    </div>
+                </div>
+                <div class="charts-container">
+                    <div class="card">
+                        <h3>Arrecadação (Últimos 6 Meses)</h3>
+                        <canvas id="chartArrecadacao"></canvas>
+                    </div>
+                    <div class="card">
+                        <h3>Gastos (Últimos 6 Meses)</h3>
+                        <canvas id="chartGastos"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Ranking dos Maiores Gastos</h3>
+                    <table id="rankingTable">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Valor</th>
+                                <th>Tipo</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="card">
+                    <h3>Contas Fixas Vencendo (Próximo Mês)</h3>
+                    <table id="contasVencendoTable">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Valor</th>
+                                <th>Mês</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Arrecadação -->
+            <div id="arrecadacao" class="page">
+                <h1>Controle de Arrecadação Diária</h1>
+                <div class="page-header">
+                    <button class="btn btn-primary" onclick="openArrecadacaoModal()">+ Nova Arrecadação</button>
+                    <div class="filters">
+                        <input type="date" id="arrecadacaoDataInicio" placeholder="Data Início">
+                        <input type="date" id="arrecadacaoDataFim" placeholder="Data Fim">
+                        <input type="month" id="arrecadacaoMes" placeholder="Mês">
+                        <button class="btn btn-secondary" onclick="filterArrecadacao()">Filtrar</button>
+                        <button class="btn btn-secondary" onclick="clearArrecadacaoFilters()">Limpar</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Total: <span id="totalArrecadacaoList">R$ 0,00</span></h3>
+                    <canvas id="chartArrecadacaoDetalhado"></canvas>
+                </div>
+                <div class="card">
+                    <table id="arrecadacaoTable">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Valor</th>
+                                <th>Observações</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Gastos -->
+            <div id="gastos" class="page">
+                <h1>Visão Geral de Gastos</h1>
+                <div class="gastos-summary">
+                    <div class="card">
+                        <h3>Contas Fixas</h3>
+                        <p class="big-number negative" id="totalFixas">R$ 0,00</p>
+                    </div>
+                    <div class="card">
+                        <h3>Contas Semanais</h3>
+                        <p class="big-number negative" id="totalSemanais">R$ 0,00</p>
+                    </div>
+                    <div class="card">
+                        <h3>Contas Diárias</h3>
+                        <p class="big-number negative" id="totalDiarias">R$ 0,00</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contas Fixas -->
+            <div id="contas-fixas" class="page">
+                <h1>Contas Fixas (Mensais)</h1>
+                <div class="page-header">
+                    <button class="btn btn-primary" onclick="openContaFixaModal()">+ Nova Conta Fixa</button>
+                    <input type="month" id="fixasMes" class="month-selector">
+                </div>
+                <div class="card">
+                    <h3>Total: <span id="totalFixasList">R$ 0,00</span></h3>
+                    <table id="fixasTable">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Valor</th>
+                                <th>Mês Referência</th>
+                                <th>Recorrência</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Contas Semanais -->
+            <div id="contas-semanais" class="page">
+                <h1>Contas Semanais</h1>
+                <div class="page-header">
+                    <button class="btn btn-primary" onclick="openContaSemanalModal()">+ Nova Conta Semanal</button>
+                    <div class="filters">
+                        <input type="week" id="semanaisSemana" placeholder="Semana">
+                        <input type="text" id="semanaisNome" placeholder="Buscar por nome">
+                        <button class="btn btn-secondary" onclick="filterSemanais()">Filtrar</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Total: <span id="totalSemanaisList">R$ 0,00</span></h3>
+                    <table id="semanaisTable">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Valor</th>
+                                <th>Semana</th>
+                                <th>Descrição</th>
+                                <th>Recorrência</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Contas Diárias -->
+            <div id="contas-diarias" class="page">
+                <h1>Contas Diárias</h1>
+                <div class="page-header">
+                    <button class="btn btn-primary" onclick="openContaDiariaModal()">+ Nova Conta Diária</button>
+                    <div class="filters">
+                        <input type="date" id="diariasDataInicio" placeholder="Data Início">
+                        <input type="date" id="diariasDataFim" placeholder="Data Fim">
+                        <input type="month" id="diariasMes" placeholder="Mês">
+                        <button class="btn btn-secondary" onclick="filterDiarias()">Filtrar</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Total: <span id="totalDiariasList">R$ 0,00</span></h3>
+                    <table id="diariasTable">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Valor</th>
+                                <th>Data</th>
+                                <th>Descrição</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Relatórios -->
+            <div id="relatorios" class="page">
+                <h1>Relatórios Detalhados</h1>
+                <div class="card">
+                    <div class="filters">
+                        <input type="text" id="relatorioNome" placeholder="Buscar por nome">
+                        <input type="text" id="relatorioDescricao" placeholder="Buscar por descrição">
+                        <select id="relatorioCategoria">
+                            <option value="">Todas as categorias</option>
+                            <option value="fixa">Contas Fixas</option>
+                            <option value="semanal">Contas Semanais</option>
+                            <option value="diaria">Contas Diárias</option>
+                        </select>
+                        <input type="date" id="relatorioDataInicio" placeholder="Data Início">
+                        <input type="date" id="relatorioDataFim" placeholder="Data Fim">
+                        <input type="month" id="relatorioMes" placeholder="Mês">
+                        <button class="btn btn-primary" onclick="buscarRelatorio()">Buscar</button>
+                        <button class="btn btn-secondary" onclick="limparRelatorio()">Limpar</button>
+                    </div>
+                    <div class="relatorio-total">
+                        <h3>Total Encontrado: <span id="relatorioTotal">R$ 0,00</span></h3>
+                    </div>
+                    <div class="export-buttons">
+                        <button class="btn btn-success" onclick="exportarPDF()">📄 Exportar PDF</button>
+                        <button class="btn btn-success" onclick="exportarExcel()">📊 Exportar Excel</button>
+                        <button class="btn btn-success" onclick="exportarCSV()">📋 Exportar CSV</button>
+                    </div>
+                    <table id="relatoriosTable">
+                        <thead>
+                            <tr>
+                                <th>Categoria</th>
+                                <th>Nome</th>
+                                <th>Valor</th>
+                                <th>Período</th>
+                                <th>Descrição</th>
+                                <th>Data Criação</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Configurações -->
+            <div id="configuracoes" class="page">
+                <h1>Configurações</h1>
+                <div class="card">
+                    <h3>Backup do Banco de Dados</h3>
+                    <button class="btn btn-primary" onclick="criarBackup()">Criar Backup</button>
+                    <p id="backupMessage"></p>
+                </div>
+                <div class="card">
+                    <h3>Histórico de Alterações</h3>
+                    <table id="logsTable">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Usuário</th>
+                                <th>Ação</th>
+                                <th>Tabela</th>
+                                <th>Registro ID</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="card">
+                    <h3>Comparar Meses</h3>
+                    <div class="filters">
+                        <input type="month" id="compararMes1" placeholder="Mês 1">
+                        <input type="month" id="compararMes2" placeholder="Mês 2">
+                        <button class="btn btn-primary" onclick="compararMeses()">Comparar</button>
+                    </div>
+                    <div id="comparacaoResultado"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modais -->
+    <!-- Modal Arrecadação -->
+    <div id="arrecadacaoModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('arrecadacaoModal')">&times;</span>
+            <h2>Nova Arrecadação</h2>
+            <form id="arrecadacaoForm">
+                <input type="hidden" id="arrecadacaoId">
+                <label>Data:</label>
+                <input type="date" id="arrecadacaoData" required>
+                <label>Valor:</label>
+                <input type="number" id="arrecadacaoValor" step="0.01" required>
+                <label>Observações:</label>
+                <textarea id="arrecadacaoObservacoes"></textarea>
+                <button type="submit" class="btn btn-primary">Salvar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Conta Fixa -->
+    <div id="contaFixaModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('contaFixaModal')">&times;</span>
+            <h2>Nova Conta Fixa</h2>
+            <form id="contaFixaForm">
+                <input type="hidden" id="contaFixaId">
+                <label>Nome:</label>
+                <input type="text" id="contaFixaNome" required>
+                <label>Valor:</label>
+                <input type="number" id="contaFixaValor" step="0.01" required>
+                <label>Mês Referência:</label>
+                <input type="month" id="contaFixaMes" required>
+                <label>Recorrência Mensal:</label>
+                <select id="contaFixaRecorrencia">
+                    <option value="1">Sim</option>
+                    <option value="0">Não</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Salvar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Conta Semanal -->
+    <div id="contaSemanalModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('contaSemanalModal')">&times;</span>
+            <h2>Nova Conta Semanal</h2>
+            <form id="contaSemanalForm">
+                <input type="hidden" id="contaSemanalId">
+                <label>Nome:</label>
+                <input type="text" id="contaSemanalNome" required>
+                <label>Valor:</label>
+                <input type="number" id="contaSemanalValor" step="0.01" required>
+                <label>Semana Referente:</label>
+                <input type="week" id="contaSemanalSemana" required>
+                <label>Descrição:</label>
+                <textarea id="contaSemanalDescricao"></textarea>
+                <label>Recorrência Semanal:</label>
+                <select id="contaSemanalRecorrencia">
+                    <option value="0">Não</option>
+                    <option value="1">Sim</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Salvar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Conta Diária -->
+    <div id="contaDiariaModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('contaDiariaModal')">&times;</span>
+            <h2>Nova Conta Diária</h2>
+            <form id="contaDiariaForm">
+                <input type="hidden" id="contaDiariaId">
+                <label>Nome:</label>
+                <input type="text" id="contaDiariaNome" required>
+                <label>Valor:</label>
+                <input type="number" id="contaDiariaValor" step="0.01" required>
+                <label>Data:</label>
+                <input type="date" id="contaDiariaData" required>
+                <label>Descrição:</label>
+                <textarea id="contaDiariaDescricao"></textarea>
+                <button type="submit" class="btn btn-primary">Salvar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
