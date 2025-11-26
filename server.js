@@ -8,8 +8,8 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = 'restaurante_financeiro_secret_key_2024';
+const PORT = process.env.PORT || process.env.BACK4APP_PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'restaurante_financeiro_secret_key_2024';
 
 // Middleware
 app.use(cors());
@@ -18,11 +18,13 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 // Inicializar banco de dados
-const db = new sqlite3.Database('./restaurante.db', (err) => {
+// No Back4app, usa caminho absoluto para persistência
+const dbPath = process.env.DATABASE_PATH || './restaurante.db';
+const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Erro ao conectar ao banco de dados:', err.message);
     } else {
-        console.log('Conectado ao banco de dados SQLite.');
+        console.log('Conectado ao banco de dados SQLite em:', dbPath);
         initializeDatabase();
     }
 });
