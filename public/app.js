@@ -246,9 +246,6 @@ function showPage(pageName) {
         case 'configuracoes':
             loadLogs();
             break;
-        case 'ia':
-            carregarRecomendacoes();
-            break;
     }
 }
 
@@ -939,8 +936,9 @@ function filterDiarias() {
     });
 }
 
-// Relatórios
-let relatorioData = [];
+// Relatórios Completos
+let relatorioData = null;
+let relatorioDetalhes = [];
 
 async function buscarRelatorio() {
     const nome = document.getElementById('relatorioNome').value;
@@ -949,39 +947,238 @@ async function buscarRelatorio() {
     const dataInicio = document.getElementById('relatorioDataInicio').value;
     const dataFim = document.getElementById('relatorioDataFim').value;
     const mes = document.getElementById('relatorioMes').value;
+    const agruparSimilares = document.getElementById('relatorioAgruparSimilares').checked;
     
     let url = '/relatorios?';
-    if (nome) url += `nome=${nome}&`;
-    if (descricao) url += `descricao=${descricao}&`;
+    if (nome) url += `nome=${encodeURIComponent(nome)}&`;
+    if (descricao) url += `descricao=${encodeURIComponent(descricao)}&`;
     if (categoria) url += `categoria=${categoria}&`;
     if (dataInicio && dataFim) {
         url += `data_inicio=${dataInicio}&data_fim=${dataFim}&`;
     } else if (mes) {
         url += `mes=${mes}&`;
     }
+    if (agruparSimilares) url += `agrupar_similares=true&`;
     
     try {
         const response = await apiRequest(url);
         relatorioData = await response.json();
+        relatorioDetalhes = relatorioData.detalhes || [];
         
-        const tbody = document.querySelector('#relatoriosTable tbody');
-        tbody.innerHTML = relatorioData.map(item => `
-            <tr>
-                <td>${item.categoria}</td>
-                <td>${item.nome}</td>
-                <td>${formatCurrency(item.valor)}</td>
-                <td>${item.periodo}</td>
-                <td>${item.descricao || '-'}</td>
-                <td>${formatDateTime(item.created_at)}</td>
-            </tr>
-        `).join('');
+        // Exibir resumo financeiro
+        exibirResumoFinanceiro(relatorioData);
         
-        const total = relatorioData.reduce((sum, item) => sum + parseFloat(item.valor), 0);
-        document.getElementById('relatorioTotal').textContent = formatCurrency(total);
+        // Exibir gastos agrupados se houver
+        if (relatorioData.gastos_agrupados && relatorioData.gastos_agrupados.length > 0) {
+            exibirGastosAgrupados(relatorioData.gastos_agrupados);
+        }
+        
+        // Exibir top gastos
+        if (relatorioData.top_gastos && relatorioData.top_gastos.length > 0) {
+            exibirTopGastos(relatorioData.top_gastos);
+        }
+        
+        // Exibir análise diária se houver
+        if (relatorioData.analise_diaria && relatorioData.analise_diaria.length > 0) {
+            exibirAnaliseDiaria(relatorioData.analise_diaria);
+        }
+        
+        // Exibir estatísticas
+        if (relatorioData.estatisticas) {
+            exibirEstatisticas(relatorioData.estatisticas);
+        }
+        
+        // Exibir detalhes completos
+        exibirDetalhesCompletos(relatorioDetalhes);
+        
     } catch (error) {
         console.error('Erro ao buscar relatório:', error);
-        alert('Erro ao buscar relatório');
+        alert('Erro ao buscar relatório: ' + (error.message || 'Erro desconhecido'));
     }
+}
+
+function exibirResumoFinanceiro(data) {
+    const resumo = data.resumo;
+    const resumoDiv = document.getElementById('relatorioResumo');
+    resumoDiv.style.display = 'block';
+    
+    document.getElementById('resumoArrecadado').textContent = formatCurrency(resumo.arrecadado);
+    document.getElementById('resumoGastos').textContent = formatCurrency(resumo.gastos);
+    
+    const lucroCard = document.getElementById('resumoLucroCard');
+    const lucroTitulo = document.getElementById('resumoLucroTitulo');
+    const lucroValor = document.getElementById('resumoLucro');
+    
+    if (resumo.status === 'lucro') {
+        lucroCard.className = 'resumo-card lucro';
+        lucroTitulo.textContent = '📈 Lucro Líquido';
+        lucroValor.textContent = formatCurrency(resumo.lucro_prejuizo);
+        lucroValor.classList.remove('negative');
+    } else {
+        lucroCard.className = 'resumo-card prejuizo';
+        lucroTitulo.textContent = '⚠️ Prejuízo';
+        lucroValor.textContent = formatCurrency(Math.abs(resumo.lucro_prejuizo));
+        lucroValor.classList.add('negative');
+    }
+    
+    document.getElementById('resumoMargem').textContent = `Margem: ${resumo.margem}%`;
+    
+    // Gastos por categoria
+    const gastosCat = data.gastos_por_categoria;
+    const totalGastos = gastosCat.fixa + gastosCat.semanal + gastosCat.diaria;
+    const maxGasto = Math.max(gastosCat.fixa, gastosCat.semanal, gastosCat.diaria);
+    
+    document.getElementById('valorFixas').textContent = formatCurrency(gastosCat.fixa);
+    document.getElementById('valorSemanais').textContent = formatCurrency(gastosCat.semanal);
+    document.getElementById('valorDiarias').textContent = formatCurrency(gastosCat.diaria);
+    
+    document.getElementById('barFixas').style.width = maxGasto > 0 ? (gastosCat.fixa / maxGasto * 100) + '%' : '0%';
+    document.getElementById('barSemanais').style.width = maxGasto > 0 ? (gastosCat.semanal / maxGasto * 100) + '%' : '0%';
+    document.getElementById('barDiarias').style.width = maxGasto > 0 ? (gastosCat.diaria / maxGasto * 100) + '%' : '0%';
+}
+
+function exibirGastosAgrupados(agrupados) {
+    const div = document.getElementById('relatorioAgrupados');
+    div.style.display = 'block';
+    
+    const tbody = document.querySelector('#agrupadosTable tbody');
+    tbody.innerHTML = agrupados.map((grupo, index) => `
+        <tr>
+            <td><strong>${grupo.nome}</strong></td>
+            <td>${grupo.quantidade}x</td>
+            <td><strong>${formatCurrency(grupo.total)}</strong></td>
+            <td>${formatCurrency(grupo.media)}</td>
+            <td>
+                <button class="btn btn-secondary" onclick="verDetalhesGrupo(${index})">Ver Detalhes</button>
+            </td>
+        </tr>
+    `).join('');
+    
+    // Armazenar grupos para detalhes
+    window.gastosAgrupadosDetalhes = agrupados;
+}
+
+function verDetalhesGrupo(index) {
+    const grupo = window.gastosAgrupadosDetalhes[index];
+    if (!grupo) return;
+    
+    let detalhes = 'Detalhes do grupo "' + grupo.nome + '":\n\n';
+    grupo.itens.forEach((item, i) => {
+        detalhes += `${i + 1}. ${item.nome} - ${formatCurrency(item.valor)} (${item.periodo})\n`;
+    });
+    detalhes += `\nTotal: ${formatCurrency(grupo.total)}`;
+    detalhes += `\nQuantidade: ${grupo.quantidade}`;
+    detalhes += `\nMédia: ${formatCurrency(grupo.media)}`;
+    
+    alert(detalhes);
+}
+
+function exibirTopGastos(topGastos) {
+    const div = document.getElementById('relatorioTopGastos');
+    div.style.display = 'block';
+    
+    const tbody = document.querySelector('#topGastosTable tbody');
+    tbody.innerHTML = topGastos.map((gasto, index) => `
+        <tr>
+            <td>${index + 1}º</td>
+            <td>${gasto.nome}</td>
+            <td><strong>${formatCurrency(gasto.valor)}</strong></td>
+            <td>${gasto.categoria}</td>
+        </tr>
+    `).join('');
+}
+
+function exibirAnaliseDiaria(analiseDiaria) {
+    const div = document.getElementById('relatorioAnaliseDiaria');
+    div.style.display = 'block';
+    
+    const labels = analiseDiaria.map(a => a.data.slice(8));
+    const arrecadado = analiseDiaria.map(a => parseFloat(a.arrecadado));
+    const gastos = analiseDiaria.map(a => parseFloat(a.gastos));
+    const lucro = analiseDiaria.map(a => parseFloat(a.lucro));
+    
+    if (charts['analiseDiaria']) {
+        charts['analiseDiaria'].destroy();
+    }
+    
+    const ctx = document.getElementById('chartAnaliseDiaria').getContext('2d');
+    charts['analiseDiaria'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Arrecadado',
+                    data: arrecadado,
+                    borderColor: '#10b981',
+                    backgroundColor: '#10b98120',
+                    tension: 0.4
+                },
+                {
+                    label: 'Gastos',
+                    data: gastos,
+                    borderColor: '#ef4444',
+                    backgroundColor: '#ef444420',
+                    tension: 0.4
+                },
+                {
+                    label: 'Lucro/Prejuízo',
+                    data: lucro,
+                    borderColor: '#4f46e5',
+                    backgroundColor: '#4f46e520',
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: true }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return 'R$ ' + value.toFixed(2);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function exibirEstatisticas(stats) {
+    const div = document.getElementById('relatorioEstatisticas');
+    div.style.display = 'block';
+    
+    document.getElementById('statTransacoes').textContent = stats.total_transacoes;
+    document.getElementById('statArrecadacoes').textContent = stats.total_arrecadacoes;
+    document.getElementById('statGastos').textContent = stats.total_gastos;
+    document.getElementById('statMediaArrecadacao').textContent = formatCurrency(stats.media_diaria_arrecadacao);
+    document.getElementById('statMediaGastos').textContent = formatCurrency(stats.media_diaria_gastos);
+}
+
+function exibirDetalhesCompletos(detalhes) {
+    const tbody = document.querySelector('#relatoriosTable tbody');
+    tbody.innerHTML = detalhes.map(item => `
+        <tr>
+            <td>${item.tipo === 'arrecadacao' ? '💰 Receita' : '💸 Gasto'}</td>
+            <td>${item.categoria}</td>
+            <td>${item.nome}</td>
+            <td class="${item.tipo === 'gasto' ? 'negative' : ''}">${formatCurrency(item.valor)}</td>
+            <td>${item.periodo}</td>
+            <td>${item.descricao || '-'}</td>
+            <td>${item.data ? formatDate(item.data) : formatDateTime(item.created_at)}</td>
+        </tr>
+    `).join('');
+    
+    const totalGastos = detalhes.filter(d => d.tipo === 'gasto').reduce((sum, d) => sum + d.valor, 0);
+    const totalArrecadado = detalhes.filter(d => d.tipo === 'arrecadacao').reduce((sum, d) => sum + d.valor, 0);
+    
+    document.getElementById('relatorioTotalGastos').textContent = formatCurrency(totalGastos);
+    document.getElementById('relatorioTotalArrecadado').textContent = formatCurrency(totalArrecadado);
 }
 
 function limparRelatorio() {
@@ -991,14 +1188,22 @@ function limparRelatorio() {
     document.getElementById('relatorioDataInicio').value = '';
     document.getElementById('relatorioDataFim').value = '';
     document.getElementById('relatorioMes').value = '';
+    document.getElementById('relatorioAgruparSimilares').checked = false;
+    
     document.querySelector('#relatoriosTable tbody').innerHTML = '';
-    document.getElementById('relatorioTotal').textContent = formatCurrency(0);
-    relatorioData = [];
+    document.getElementById('relatorioResumo').style.display = 'none';
+    document.getElementById('relatorioAgrupados').style.display = 'none';
+    document.getElementById('relatorioTopGastos').style.display = 'none';
+    document.getElementById('relatorioAnaliseDiaria').style.display = 'none';
+    document.getElementById('relatorioEstatisticas').style.display = 'none';
+    
+    relatorioData = null;
+    relatorioDetalhes = [];
 }
 
 // Exportações
 function exportarPDF() {
-    if (relatorioData.length === 0) {
+    if (!relatorioData || !relatorioDetalhes || relatorioDetalhes.length === 0) {
         alert('Nenhum dado para exportar. Faça uma busca primeiro.');
         return;
     }
@@ -1007,88 +1212,151 @@ function exportarPDF() {
     const doc = new jsPDF();
     
     doc.setFontSize(18);
-    doc.text('Relatório Financeiro', 14, 20);
+    doc.text('Relatório Financeiro Completo', 14, 20);
     
+    // Resumo
+    doc.setFontSize(14);
+    doc.text('RESUMO FINANCEIRO', 14, 35);
     doc.setFontSize(12);
-    let y = 35;
+    doc.text(`Período: ${relatorioData.periodo.inicio} a ${relatorioData.periodo.fim}`, 14, 42);
+    doc.text(`Arrecadado: ${formatCurrency(relatorioData.resumo.arrecadado)}`, 14, 49);
+    doc.text(`Gastos: ${formatCurrency(relatorioData.resumo.gastos)}`, 14, 56);
+    doc.text(`Lucro/Prejuízo: ${formatCurrency(relatorioData.resumo.lucro_prejuizo)}`, 14, 63);
+    doc.text(`Margem: ${relatorioData.resumo.margem}%`, 14, 70);
     
-    relatorioData.forEach((item, index) => {
+    let y = 80;
+    
+    // Gastos agrupados se houver
+    if (relatorioData.gastos_agrupados && relatorioData.gastos_agrupados.length > 0) {
+        if (y > 250) {
+            doc.addPage();
+            y = 20;
+        }
+        doc.setFontSize(14);
+        doc.text('GASTOS AGRUPADOS', 14, y);
+        y += 10;
+        doc.setFontSize(10);
+        relatorioData.gastos_agrupados.forEach(grupo => {
+            if (y > 280) {
+                doc.addPage();
+                y = 20;
+            }
+            doc.text(`${grupo.nome}: ${formatCurrency(grupo.total)} (${grupo.quantidade}x)`, 14, y);
+            y += 7;
+        });
+        y += 5;
+    }
+    
+    // Detalhes
+    if (y > 250) {
+        doc.addPage();
+        y = 20;
+    }
+    doc.setFontSize(14);
+    doc.text('DETALHES COMPLETOS', 14, y);
+    y += 10;
+    doc.setFontSize(10);
+    
+    relatorioDetalhes.forEach((item, index) => {
         if (y > 280) {
             doc.addPage();
             y = 20;
         }
         
-        doc.text(`${index + 1}. ${item.categoria.toUpperCase()} - ${item.nome}`, 14, y);
-        y += 7;
-        doc.text(`   Valor: ${formatCurrency(item.valor)} | Período: ${item.periodo}`, 14, y);
-        y += 7;
+        doc.text(`${index + 1}. ${item.tipo === 'arrecadacao' ? 'RECEITA' : 'GASTO'} - ${item.categoria}`, 14, y);
+        y += 6;
+        doc.text(`   ${item.nome}: ${formatCurrency(item.valor)} | ${item.periodo}`, 14, y);
+        y += 6;
         if (item.descricao) {
             doc.text(`   Descrição: ${item.descricao}`, 14, y);
-            y += 7;
+            y += 6;
         }
         y += 3;
     });
     
-    const total = relatorioData.reduce((sum, item) => sum + parseFloat(item.valor), 0);
-    doc.setFontSize(14);
-    doc.text(`Total: ${formatCurrency(total)}`, 14, y + 10);
-    
-    doc.save('relatorio-financeiro.pdf');
+    doc.save('relatorio-financeiro-completo.pdf');
 }
 
 function exportarExcel() {
-    if (relatorioData.length === 0) {
+    if (!relatorioData || !relatorioDetalhes || relatorioDetalhes.length === 0) {
         alert('Nenhum dado para exportar. Faça uma busca primeiro.');
         return;
     }
     
-    const data = relatorioData.map(item => ({
+    const wb = XLSX.utils.book_new();
+    
+    // Aba 1: Resumo
+    const resumoData = [
+        ['RESUMO FINANCEIRO'],
+        ['Período', `${relatorioData.periodo.inicio} a ${relatorioData.periodo.fim}`],
+        ['Arrecadado', relatorioData.resumo.arrecadado],
+        ['Gastos', relatorioData.resumo.gastos],
+        ['Lucro/Prejuízo', relatorioData.resumo.lucro_prejuizo],
+        ['Margem (%)', relatorioData.resumo.margem]
+    ];
+    const wsResumo = XLSX.utils.aoa_to_sheet(resumoData);
+    XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
+    
+    // Aba 2: Gastos Agrupados
+    if (relatorioData.gastos_agrupados && relatorioData.gastos_agrupados.length > 0) {
+        const agrupadosData = relatorioData.gastos_agrupados.map(g => ({
+            'Nome': g.nome,
+            'Quantidade': g.quantidade,
+            'Total': g.total,
+            'Média': g.media
+        }));
+        const wsAgrupados = XLSX.utils.json_to_sheet(agrupadosData);
+        XLSX.utils.book_append_sheet(wb, wsAgrupados, 'Gastos Agrupados');
+    }
+    
+    // Aba 3: Detalhes
+    const detalhesData = relatorioDetalhes.map(item => ({
+        'Tipo': item.tipo === 'arrecadacao' ? 'Receita' : 'Gasto',
         'Categoria': item.categoria,
         'Nome': item.nome,
-        'Valor': parseFloat(item.valor),
+        'Valor': item.valor,
         'Período': item.periodo,
         'Descrição': item.descricao || '',
-        'Data Criação': formatDateTime(item.created_at)
+        'Data': item.data || formatDateTime(item.created_at)
     }));
+    const wsDetalhes = XLSX.utils.json_to_sheet(detalhesData);
+    XLSX.utils.book_append_sheet(wb, wsDetalhes, 'Detalhes');
     
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Relatório');
-    
-    const total = relatorioData.reduce((sum, item) => sum + parseFloat(item.valor), 0);
-    XLSX.utils.sheet_add_aoa(ws, [['TOTAL', '', total, '', '', '']], { origin: -1 });
-    
-    XLSX.writeFile(wb, 'relatorio-financeiro.xlsx');
+    XLSX.writeFile(wb, 'relatorio-financeiro-completo.xlsx');
 }
 
 function exportarCSV() {
-    if (relatorioData.length === 0) {
+    if (!relatorioData || !relatorioDetalhes || relatorioDetalhes.length === 0) {
         alert('Nenhum dado para exportar. Faça uma busca primeiro.');
         return;
     }
     
-    const headers = ['Categoria', 'Nome', 'Valor', 'Período', 'Descrição', 'Data Criação'];
-    const rows = relatorioData.map(item => [
+    const headers = ['Tipo', 'Categoria', 'Nome', 'Valor', 'Período', 'Descrição', 'Data'];
+    const rows = relatorioDetalhes.map(item => [
+        item.tipo === 'arrecadacao' ? 'Receita' : 'Gasto',
         item.categoria,
         item.nome,
         item.valor,
         item.periodo,
         item.descricao || '',
-        formatDateTime(item.created_at)
+        item.data || formatDateTime(item.created_at)
     ]);
     
-    const total = relatorioData.reduce((sum, item) => sum + parseFloat(item.valor), 0);
-    rows.push(['TOTAL', '', total, '', '', '']);
+    const totalGastos = relatorioDetalhes.filter(d => d.tipo === 'gasto').reduce((sum, d) => sum + d.valor, 0);
+    const totalArrecadado = relatorioDetalhes.filter(d => d.tipo === 'arrecadacao').reduce((sum, d) => sum + d.valor, 0);
+    rows.push(['', 'TOTAL GASTOS', '', totalGastos, '', '', '']);
+    rows.push(['', 'TOTAL ARRECADADO', '', totalArrecadado, '', '', '']);
+    rows.push(['', 'LUCRO/PREJUÍZO', '', relatorioData.resumo.lucro_prejuizo, '', '', '']);
     
     const csv = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ...rows.map(row => row.map(cell => `"${String(cell)}"`).join(','))
     ].join('\n');
     
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'relatorio-financeiro.csv';
+    link.download = 'relatorio-financeiro-completo.csv';
     link.click();
 }
 
@@ -1299,178 +1567,6 @@ async function loadMobileRecentGastos() {
 // ========== FUNÇÕES DE IA ==========
 
 // Gerar análise com IA
-async function gerarAnaliseIA() {
-    const resultado = document.getElementById('analiseResultado');
-    if (!resultado) return;
-    resultado.style.display = 'block';
-    resultado.innerHTML = '<p>⏳ Analisando dados financeiros...</p>';
-    
-    try {
-        const response = await apiRequest('/ia/analise', {
-            method: 'POST',
-            body: JSON.stringify({
-                periodo: document.getElementById('dashboardMonth')?.value || new Date().toISOString().slice(0, 7),
-                tipo: 'basica'
-            })
-        });
-        
-        const analise = await response.json();
-        
-        let html = `
-            <h3>Análise do Período: ${analise.periodo}</h3>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1rem 0;">
-                <div><strong>Arrecadado:</strong> ${formatCurrency(analise.resumo.arrecadado)}</div>
-                <div><strong>Gastos:</strong> ${formatCurrency(analise.resumo.gastos)}</div>
-                <div><strong>Lucro:</strong> ${formatCurrency(analise.resumo.lucro)}</div>
-            </div>
-            <div><strong>Margem:</strong> ${analise.resumo.margem}%</div>
-        `;
-        
-        if (analise.insights && analise.insights.length > 0) {
-            html += '<h4 style="margin-top: 1.5rem;">Insights:</h4>';
-            analise.insights.forEach(insight => {
-                html += `
-                    <div class="ia-insight ${insight.tipo}">
-                        <strong>${insight.titulo}</strong>
-                        <p>${insight.descricao}</p>
-                    </div>
-                `;
-            });
-        }
-        
-        if (analise.alertas && analise.alertas.length > 0) {
-            html += '<h4 style="margin-top: 1.5rem;">Alertas:</h4>';
-            analise.alertas.forEach(alerta => {
-                html += `
-                    <div class="ia-insight ${alerta.nivel === 'alto' ? 'alerta' : 'atencao'}">
-                        <p>${alerta.mensagem}</p>
-                    </div>
-                `;
-            });
-        }
-        
-        if (analise.iaAvancada) {
-            html += `
-                <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(79, 70, 229, 0.1); border-radius: 8px;">
-                    <h4>Análise Avançada com IA:</h4>
-                    <p style="white-space: pre-wrap;">${analise.iaAvancada}</p>
-                </div>
-            `;
-        }
-        
-        resultado.innerHTML = html;
-    } catch (error) {
-        console.error('Erro ao gerar análise:', error);
-        resultado.innerHTML = '<p style="color: var(--danger-color);">Erro ao gerar análise. Tente novamente.</p>';
-    }
-}
-
-// Chat com IA
-async function enviarPerguntaIA() {
-    const input = document.getElementById('chatInput');
-    if (!input) return;
-    const pergunta = input.value.trim();
-    
-    if (!pergunta) return;
-    
-    // Adicionar pergunta do usuário
-    adicionarMensagemChat('user', pergunta);
-    input.value = '';
-    
-    // Adicionar mensagem de carregamento
-    const loadingId = adicionarMensagemChat('assistant', '⏳ Pensando...');
-    
-    try {
-        const response = await apiRequest('/ia/chat', {
-            method: 'POST',
-            body: JSON.stringify({ pergunta })
-        });
-        
-        const data = await response.json();
-        
-        // Remover loading e adicionar resposta
-        removerMensagemChat(loadingId);
-        adicionarMensagemChat('assistant', data.resposta);
-    } catch (error) {
-        console.error('Erro no chat:', error);
-        removerMensagemChat(loadingId);
-        adicionarMensagemChat('assistant', 'Desculpe, ocorreu um erro. Tente novamente.');
-    }
-}
-
-function adicionarMensagemChat(tipo, texto) {
-    const container = document.getElementById('chatMessages');
-    if (!container) return null;
-    const id = 'msg-' + Date.now();
-    const messageDiv = document.createElement('div');
-    messageDiv.id = id;
-    messageDiv.className = `chat-message ${tipo}`;
-    messageDiv.textContent = texto;
-    container.appendChild(messageDiv);
-    container.scrollTop = container.scrollHeight;
-    return id;
-}
-
-function removerMensagemChat(id) {
-    const msg = document.getElementById(id);
-    if (msg) msg.remove();
-}
-
-// Carregar recomendações
-async function carregarRecomendacoes() {
-    const container = document.getElementById('recomendacoesContainer');
-    if (!container) return;
-    
-    container.innerHTML = '<p>⏳ Carregando recomendações...</p>';
-    
-    try {
-        const mes = document.getElementById('dashboardMonth')?.value || new Date().toISOString().slice(0, 7);
-        const response = await apiRequest(`/ia/recomendacoes?mes=${mes}`);
-        const recomendacoes = await response.json();
-        
-        if (recomendacoes.length === 0) {
-            container.innerHTML = '<p>Nenhuma recomendação no momento.</p>';
-            return;
-        }
-        
-        container.innerHTML = recomendacoes.map(rec => `
-            <div class="recomendacao ${rec.prioridade}">
-                <div class="recomendacao-titulo">
-                    ${rec.prioridade === 'alta' ? '🔴' : rec.prioridade === 'media' ? '🟡' : '🟢'}
-                    ${rec.titulo}
-                </div>
-                <div class="recomendacao-desc">${rec.descricao}</div>
-                <div class="recomendacao-acao">💡 ${rec.acao}</div>
-            </div>
-        `).join('');
-    } catch (error) {
-        console.error('Erro ao carregar recomendações:', error);
-        container.innerHTML = '<p style="color: var(--danger-color);">Erro ao carregar recomendações.</p>';
-    }
-}
-
-// Permitir Enter no chat
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        const chatInput = document.getElementById('chatInput');
-        if (chatInput) {
-            chatInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    enviarPerguntaIA();
-                }
-            });
-        }
-    });
-} else {
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput) {
-        chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                enviarPerguntaIA();
-            }
-        });
-    }
-}
 
 // Fechar modal ao clicar fora
 window.onclick = function(event) {

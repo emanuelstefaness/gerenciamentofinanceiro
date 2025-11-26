@@ -136,9 +136,6 @@
                 <a href="#" data-page="configuracoes" class="nav-item">
                     <span>⚙️</span> Configurações
                 </a>
-                <a href="#" data-page="ia" class="nav-item">
-                    <span>🤖</span> Assistente IA
-                </a>
             </nav>
             <div class="sidebar-footer">
                 <p id="currentUser">Usuário: <span></span></p>
@@ -343,8 +340,11 @@
 
             <!-- Relatórios -->
             <div id="relatorios" class="page">
-                <h1>Relatórios Detalhados</h1>
+                <h1>Relatórios Completos e Detalhados</h1>
+                
+                <!-- Filtros -->
                 <div class="card">
+                    <h3>Filtros de Busca</h3>
                     <div class="filters">
                         <input type="text" id="relatorioNome" placeholder="Buscar por nome">
                         <input type="text" id="relatorioDescricao" placeholder="Buscar por descrição">
@@ -357,60 +357,158 @@
                         <input type="date" id="relatorioDataInicio" placeholder="Data Início">
                         <input type="date" id="relatorioDataFim" placeholder="Data Fim">
                         <input type="month" id="relatorioMes" placeholder="Mês">
-                        <button class="btn btn-primary" onclick="buscarRelatorio()">Buscar</button>
+                        <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="relatorioAgruparSimilares">
+                            Agrupar gastos similares
+                        </label>
+                        <button class="btn btn-primary" onclick="buscarRelatorio()">🔍 Buscar</button>
                         <button class="btn btn-secondary" onclick="limparRelatorio()">Limpar</button>
                     </div>
-                    <div class="relatorio-total">
-                        <h3>Total Encontrado: <span id="relatorioTotal">R$ 0,00</span></h3>
+                </div>
+
+                <!-- Resumo Financeiro -->
+                <div id="relatorioResumo" class="relatorio-resumo" style="display: none;">
+                    <div class="card">
+                        <h2>📊 Resumo Financeiro do Período</h2>
+                        <div class="resumo-grid">
+                            <div class="resumo-card receita">
+                                <h4>💰 Total Arrecadado</h4>
+                                <p class="big-number" id="resumoArrecadado">R$ 0,00</p>
+                            </div>
+                            <div class="resumo-card despesa">
+                                <h4>💸 Total Gastos</h4>
+                                <p class="big-number negative" id="resumoGastos">R$ 0,00</p>
+                            </div>
+                            <div class="resumo-card" id="resumoLucroCard">
+                                <h4 id="resumoLucroTitulo">📈 Lucro Líquido</h4>
+                                <p class="big-number" id="resumoLucro">R$ 0,00</p>
+                                <p class="margem-text" id="resumoMargem">Margem: 0%</p>
+                            </div>
+                        </div>
+                        <div class="gastos-por-categoria">
+                            <h4>Gastos por Categoria:</h4>
+                            <div class="categoria-bars">
+                                <div class="categoria-bar">
+                                    <span>Fixas:</span>
+                                    <div class="bar-container">
+                                        <div class="bar-fill" id="barFixas" style="width: 0%"></div>
+                                    </div>
+                                    <span id="valorFixas">R$ 0,00</span>
+                                </div>
+                                <div class="categoria-bar">
+                                    <span>Semanais:</span>
+                                    <div class="bar-container">
+                                        <div class="bar-fill" id="barSemanais" style="width: 0%"></div>
+                                    </div>
+                                    <span id="valorSemanais">R$ 0,00</span>
+                                </div>
+                                <div class="categoria-bar">
+                                    <span>Diárias:</span>
+                                    <div class="bar-container">
+                                        <div class="bar-fill" id="barDiarias" style="width: 0%"></div>
+                                    </div>
+                                    <span id="valorDiarias">R$ 0,00</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="export-buttons">
-                        <button class="btn btn-success" onclick="exportarPDF()">📄 Exportar PDF</button>
-                        <button class="btn btn-success" onclick="exportarExcel()">📊 Exportar Excel</button>
-                        <button class="btn btn-success" onclick="exportarCSV()">📋 Exportar CSV</button>
-                    </div>
-                    <table id="relatoriosTable">
+                </div>
+
+                <!-- Gastos Agrupados -->
+                <div id="relatorioAgrupados" class="card" style="display: none;">
+                    <h3>📦 Gastos Agrupados (Palavras Similares)</h3>
+                    <p class="info-text">Gastos com nomes similares foram agrupados automaticamente</p>
+                    <table id="agrupadosTable">
                         <thead>
                             <tr>
-                                <th>Categoria</th>
-                                <th>Nome</th>
-                                <th>Valor</th>
-                                <th>Período</th>
-                                <th>Descrição</th>
-                                <th>Data Criação</th>
+                                <th>Nome Agrupado</th>
+                                <th>Quantidade</th>
+                                <th>Total</th>
+                                <th>Média</th>
+                                <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
                     </table>
                 </div>
-            </div>
 
-            <!-- Assistente IA -->
-            <div id="ia" class="page">
-                <h1>🤖 Assistente de IA</h1>
-                <div class="ia-container">
-                    <div class="card">
-                        <h3>Análise Inteligente</h3>
-                        <p>Obtenha insights automáticos sobre suas finanças</p>
-                        <button class="btn btn-primary" onclick="gerarAnaliseIA()">📊 Gerar Análise</button>
-                        <div id="analiseResultado" class="ia-resultado" style="display: none;"></div>
-                    </div>
-                    
-                    <div class="card">
-                        <h3>Chat com Assistente</h3>
-                        <div class="chat-container">
-                            <div id="chatMessages" class="chat-messages"></div>
-                            <div class="chat-input-container">
-                                <input type="text" id="chatInput" placeholder="Pergunte algo sobre suas finanças..." class="chat-input">
-                                <button class="btn btn-primary" onclick="enviarPerguntaIA()">Enviar</button>
-                            </div>
+                <!-- Top Gastos -->
+                <div id="relatorioTopGastos" class="card" style="display: none;">
+                    <h3>🏆 Top 10 Maiores Gastos</h3>
+                    <table id="topGastosTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Nome</th>
+                                <th>Valor</th>
+                                <th>Categoria</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <!-- Análise Diária -->
+                <div id="relatorioAnaliseDiaria" class="card" style="display: none;">
+                    <h3>📅 Análise Diária do Período</h3>
+                    <canvas id="chartAnaliseDiaria"></canvas>
+                </div>
+
+                <!-- Estatísticas -->
+                <div id="relatorioEstatisticas" class="card" style="display: none;">
+                    <h3>📊 Estatísticas do Período</h3>
+                    <div class="estatisticas-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">Total de Transações:</span>
+                            <span class="stat-value" id="statTransacoes">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Arrecadações:</span>
+                            <span class="stat-value" id="statArrecadacoes">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Gastos:</span>
+                            <span class="stat-value" id="statGastos">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Média Diária (Arrecadação):</span>
+                            <span class="stat-value" id="statMediaArrecadacao">R$ 0,00</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Média Diária (Gastos):</span>
+                            <span class="stat-value" id="statMediaGastos">R$ 0,00</span>
                         </div>
                     </div>
-                    
-                    <div class="card">
-                        <h3>Recomendações Inteligentes</h3>
-                        <button class="btn btn-secondary" onclick="carregarRecomendacoes()">🔄 Atualizar Recomendações</button>
-                        <div id="recomendacoesContainer" class="recomendacoes-container"></div>
+                </div>
+
+                <!-- Detalhes Completos -->
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3>📋 Detalhes Completos</h3>
+                        <div class="export-buttons">
+                            <button class="btn btn-success" onclick="exportarPDF()">📄 PDF</button>
+                            <button class="btn btn-success" onclick="exportarExcel()">📊 Excel</button>
+                            <button class="btn btn-success" onclick="exportarCSV()">📋 CSV</button>
+                        </div>
                     </div>
+                    <div class="relatorio-total">
+                        <h4>Total de Gastos: <span id="relatorioTotalGastos">R$ 0,00</span></h4>
+                        <h4>Total Arrecadado: <span id="relatorioTotalArrecadado">R$ 0,00</span></h4>
+                    </div>
+                    <table id="relatoriosTable">
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Categoria</th>
+                                <th>Nome</th>
+                                <th>Valor</th>
+                                <th>Período</th>
+                                <th>Descrição</th>
+                                <th>Data</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
 

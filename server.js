@@ -475,101 +475,298 @@ app.delete('/api/contas-diarias/:id', authenticateToken, (req, res) => {
     });
 });
 
-// ========== ROTAS DE RELATÓRIOS ==========
-app.get('/api/relatorios', authenticateToken, (req, res) => {
-    const { nome, descricao, categoria, data_inicio, data_fim, mes, semana } = req.query;
+// ========== ROTAS DE RELATÓRIOS COMPLETOS ==========
+app.get('/api/relatorios', authenticateToken, async (req, res) => {
+    const { nome, descricao, categoria, data_inicio, data_fim, mes, semana, agrupar_similares } = req.query;
     
-    let results = [];
-    const promises = [];
-
-    // Buscar em contas fixas
-    if (!categoria || categoria === 'fixa') {
-        let query = "SELECT 'fixa' as categoria, id, nome, valor, mes_referencia as periodo, NULL as descricao, created_at FROM contas_fixas WHERE 1=1";
-        const params = [];
-        
-        if (nome) {
-            query += " AND nome LIKE ?";
-            params.push(`%${nome}%`);
-        }
-        if (mes) {
-            query += " AND mes_referencia = ?";
-            params.push(mes);
-        }
-        
-        promises.push(new Promise((resolve, reject) => {
-            db.all(query, params, (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        }));
-    }
-
-    // Buscar em contas semanais
-    if (!categoria || categoria === 'semanal') {
-        let query = "SELECT 'semanal' as categoria, id, nome, valor, semana_referente as periodo, descricao, created_at FROM contas_semanais WHERE 1=1";
-        const params = [];
-        
-        if (nome) {
-            query += " AND nome LIKE ?";
-            params.push(`%${nome}%`);
-        }
-        if (descricao) {
-            query += " AND descricao LIKE ?";
-            params.push(`%${descricao}%`);
-        }
-        if (semana) {
-            query += " AND semana_referente = ?";
-            params.push(semana);
-        }
-        
-        promises.push(new Promise((resolve, reject) => {
-            db.all(query, params, (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        }));
-    }
-
-    // Buscar em contas diárias
-    if (!categoria || categoria === 'diaria') {
-        let query = "SELECT 'diaria' as categoria, id, nome, valor, data as periodo, descricao, created_at FROM contas_diarias WHERE 1=1";
-        const params = [];
-        
-        if (nome) {
-            query += " AND nome LIKE ?";
-            params.push(`%${nome}%`);
-        }
-        if (descricao) {
-            query += " AND descricao LIKE ?";
-            params.push(`%${descricao}%`);
-        }
+    try {
+        // Determinar período
+        let periodoInicio, periodoFim;
         if (data_inicio && data_fim) {
-            query += " AND data BETWEEN ? AND ?";
-            params.push(data_inicio, data_fim);
+            periodoInicio = data_inicio;
+            periodoFim = data_fim;
         } else if (mes) {
-            query += " AND strftime('%Y-%m', data) = ?";
-            params.push(mes);
+            periodoInicio = mes + '-01';
+            const [ano, mesNum] = mes.split('-');
+            const ultimoDia = new Date(ano, mesNum, 0).getDate();
+            periodoFim = mes + '-' + String(ultimoDia).padStart(2, '0');
         } else if (semana) {
-            query += " AND strftime('%Y-W%W', data) = ?";
-            params.push(semana);
+            // Calcular início e fim da semana
+            const [ano, semanaNum] = semana.split('-W');
+            const inicioAno = new Date(ano, 0, 1);
+            const dias = (semanaNum - 1) * 7;
+            const inicioSemana = new Date(inicioAno);
+            inicioSemana.setDate(inicioSemana.getDate() + dias);
+            periodoInicio = inicioSemana.toISOString().slice(0, 10);
+            const fimSemana = new Date(inicioSemana);
+            fimSemana.setDate(fimSemana.getDate() + 6);
+            periodoFim = fimSemana.toISOString().slice(0, 10);
+        } else {
+            // Último mês por padrão
+            const hoje = new Date();
+            periodoInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
+            periodoFim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
         }
-        
-        promises.push(new Promise((resolve, reject) => {
-            db.all(query, params, (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        }));
-    }
 
-    Promise.all(promises).then(allResults => {
-        allResults.forEach(rows => {
-            results = results.concat(rows);
+        const promises = {
+            arrecadacao: new Promise((resolve) => {
+                let query = "SELECT * FROM arrecadacao WHERE data BETWEEN ? AND ?";
+                const params = [periodoInicio, periodoFim];
+                db.all(query, params, (err, rows) => {
+                    resolve(rows || []);
+                });
+            }),
+            fixas: new Promise((resolve) => {
+                let query = "SELECT * FROM contas_fixas WHERE 1=1";
+                const params = [];
+                if (mes) {
+                    query += " AND mes_referencia = ?";
+                    params.push(mes);
+                }
+                if (nome) {
+                    query += " AND nome LIKE ?";
+                    params.push(`%${nome}%`);
+                }
+                if (!categoria || categoria === 'fixa') {
+                    db.all(query, params, (err, rows) => {
+                        resolve(rows || []);
+                    });
+                } else {
+                    resolve([]);
+                }
+            }),
+            semanais: new Promise((resolve) => {
+                let query = "SELECT * FROM contas_semanais WHERE 1=1";
+                const params = [];
+                if (semana) {
+                    query += " AND semana_referente = ?";
+                    params.push(semana);
+                }
+                if (nome) {
+                    query += " AND nome LIKE ?";
+                    params.push(`%${nome}%`);
+                }
+                if (descricao) {
+                    query += " AND descricao LIKE ?";
+                    params.push(`%${descricao}%`);
+                }
+                if (!categoria || categoria === 'semanal') {
+                    db.all(query, params, (err, rows) => {
+                        resolve(rows || []);
+                    });
+                } else {
+                    resolve([]);
+                }
+            }),
+            diarias: new Promise((resolve) => {
+                let query = "SELECT * FROM contas_diarias WHERE data BETWEEN ? AND ?";
+                const params = [periodoInicio, periodoFim];
+                if (nome) {
+                    query += " AND nome LIKE ?";
+                    params.push(`%${nome}%`);
+                }
+                if (descricao) {
+                    query += " AND descricao LIKE ?";
+                    params.push(`%${descricao}%`);
+                }
+                if (!categoria || categoria === 'diaria') {
+                    db.all(query, params, (err, rows) => {
+                        resolve(rows || []);
+                    });
+                } else {
+                    resolve([]);
+                }
+            })
+        };
+
+        const [arrecadacao, fixas, semanais, diarias] = await Promise.all([
+            promises.arrecadacao,
+            promises.fixas,
+            promises.semanais,
+            promises.diarias
+        ]);
+
+        // Calcular totais
+        const totalArrecadado = arrecadacao.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+        const totalFixas = fixas.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+        const totalSemanais = semanais.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+        const totalDiarias = diarias.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
+        const totalGastos = totalFixas + totalSemanais + totalDiarias;
+        const lucroPrejuizo = totalArrecadado - totalGastos;
+        const margem = totalArrecadado > 0 ? ((lucroPrejuizo / totalArrecadado) * 100).toFixed(2) : 0;
+
+        // Preparar dados detalhados
+        const detalhes = [];
+        
+        // Adicionar arrecadação
+        arrecadacao.forEach(item => {
+            detalhes.push({
+                tipo: 'arrecadacao',
+                categoria: 'Receita',
+                id: item.id,
+                nome: 'Arrecadação',
+                valor: parseFloat(item.valor),
+                periodo: item.data,
+                descricao: item.observacoes || 'Arrecadação diária',
+                created_at: item.created_at,
+                data: item.data
+            });
         });
-        res.json(results);
-    }).catch(err => {
-        res.status(500).json({ error: err.message });
-    });
+
+        // Adicionar gastos fixos
+        fixas.forEach(item => {
+            detalhes.push({
+                tipo: 'gasto',
+                categoria: 'Fixa',
+                id: item.id,
+                nome: item.nome,
+                valor: parseFloat(item.valor),
+                periodo: item.mes_referencia,
+                descricao: null,
+                created_at: item.created_at,
+                data: null
+            });
+        });
+
+        // Adicionar gastos semanais
+        semanais.forEach(item => {
+            detalhes.push({
+                tipo: 'gasto',
+                categoria: 'Semanal',
+                id: item.id,
+                nome: item.nome,
+                valor: parseFloat(item.valor),
+                periodo: item.semana_referente,
+                descricao: item.descricao,
+                created_at: item.created_at,
+                data: null
+            });
+        });
+
+        // Adicionar gastos diários
+        diarias.forEach(item => {
+            detalhes.push({
+                tipo: 'gasto',
+                categoria: 'Diária',
+                id: item.id,
+                nome: item.nome,
+                valor: parseFloat(item.valor),
+                periodo: item.data,
+                descricao: item.descricao,
+                created_at: item.created_at,
+                data: item.data
+            });
+        });
+
+        // Agrupar gastos similares se solicitado
+        let gastosAgrupados = [];
+        if (agrupar_similares === 'true' || agrupar_similares === '1') {
+            const gastos = detalhes.filter(d => d.tipo === 'gasto');
+            const grupos = {};
+            
+            gastos.forEach(gasto => {
+                const nomeNormalizado = normalizarTexto(gasto.nome);
+                let encontrado = false;
+                
+                // Procurar grupo similar
+                for (const [chave, grupo] of Object.entries(grupos)) {
+                    if (similaridade(nomeNormalizado, chave) > 0.7) {
+                        grupo.total += gasto.valor;
+                        grupo.quantidade++;
+                        grupo.itens.push(gasto);
+                        encontrado = true;
+                        break;
+                    }
+                }
+                
+                if (!encontrado) {
+                    grupos[nomeNormalizado] = {
+                        nome: gasto.nome, // Usa o primeiro nome encontrado
+                        total: gasto.valor,
+                        quantidade: 1,
+                        itens: [gasto]
+                    };
+                }
+            });
+            
+            // Converter grupos em array
+            gastosAgrupados = Object.values(grupos).map(grupo => ({
+                nome: grupo.nome,
+                total: grupo.total,
+                quantidade: grupo.quantidade,
+                media: grupo.total / grupo.quantidade,
+                itens: grupo.itens
+            })).sort((a, b) => b.total - a.total);
+        }
+
+        // Análise por categoria de gasto
+        const gastosPorCategoria = {
+            fixa: totalFixas,
+            semanal: totalSemanais,
+            diaria: totalDiarias
+        };
+
+        // Top 10 maiores gastos
+        const todosGastos = [...fixas, ...semanais, ...diarias];
+        const topGastos = todosGastos
+            .map(g => ({ nome: g.nome, valor: parseFloat(g.valor), categoria: g.mes_referencia ? 'Fixa' : (g.semana_referente ? 'Semanal' : 'Diária') }))
+            .sort((a, b) => b.valor - a.valor)
+            .slice(0, 10);
+
+        // Análise diária (se período for mensal)
+        let analiseDiaria = [];
+        if (mes || (data_inicio && data_fim && data_inicio.slice(0, 7) === data_fim.slice(0, 7))) {
+            const mesAnalise = mes || data_inicio.slice(0, 7);
+            const diasNoMes = new Date(mesAnalise.split('-')[0], mesAnalise.split('-')[1], 0).getDate();
+            
+            for (let dia = 1; dia <= diasNoMes; dia++) {
+                const dataStr = mesAnalise + '-' + String(dia).padStart(2, '0');
+                const arrecDia = arrecadacao.filter(a => a.data === dataStr).reduce((sum, a) => sum + parseFloat(a.valor), 0);
+                const gastosDia = diarias.filter(d => d.data === dataStr).reduce((sum, d) => sum + parseFloat(d.valor), 0);
+                analiseDiaria.push({
+                    data: dataStr,
+                    arrecadado: arrecDia,
+                    gastos: gastosDia,
+                    lucro: arrecDia - gastosDia
+                });
+            }
+        }
+
+        // Resposta completa
+        const relatorio = {
+            periodo: {
+                inicio: periodoInicio,
+                fim: periodoFim,
+                tipo: mes ? 'mensal' : (semana ? 'semanal' : 'customizado')
+            },
+            resumo: {
+                arrecadado: totalArrecadado,
+                gastos: totalGastos,
+                lucro_prejuizo: lucroPrejuizo,
+                margem: parseFloat(margem),
+                status: lucroPrejuizo >= 0 ? 'lucro' : 'prejuizo'
+            },
+            detalhes: detalhes,
+            gastos_agrupados: gastosAgrupados,
+            gastos_por_categoria: gastosPorCategoria,
+            top_gastos: topGastos,
+            analise_diaria: analiseDiaria,
+            estatisticas: {
+                total_transacoes: detalhes.length,
+                total_arrecadacoes: arrecadacao.length,
+                total_gastos: todosGastos.length,
+                media_diaria_arrecadacao: periodoInicio && periodoFim ? 
+                    totalArrecadado / Math.ceil((new Date(periodoFim) - new Date(periodoInicio)) / (1000 * 60 * 60 * 24)) : 0,
+                media_diaria_gastos: periodoInicio && periodoFim ? 
+                    totalGastos / Math.ceil((new Date(periodoFim) - new Date(periodoInicio)) / (1000 * 60 * 60 * 24)) : 0
+            }
+        };
+
+        res.json(relatorio);
+    } catch (error) {
+        console.error('Erro ao gerar relatório:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório completo' });
+    }
 });
 
 // ========== ROTAS DE DASHBOARD ==========
@@ -729,352 +926,39 @@ app.get('/api/comparar-meses', authenticateToken, (req, res) => {
     });
 });
 
-// ========== ROTAS DE IA ==========
-const OpenAI = require('openai');
-
-// Inicializar OpenAI (opcional - funciona sem chave também com análise local)
-let openai = null;
-if (process.env.OPENAI_API_KEY) {
-    openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
-    });
+// Função auxiliar para normalizar texto (agrupar palavras similares)
+function normalizarTexto(texto) {
+    if (!texto) return '';
+    return texto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+        .trim()
+        .replace(/\s+/g, ' '); // Remove espaços extras
 }
 
-// Análise inteligente de gastos
-app.post('/api/ia/analise', authenticateToken, async (req, res) => {
-    const { periodo, tipo } = req.body;
-    const mesAtual = periodo || new Date().toISOString().slice(0, 7);
+// Função para calcular similaridade entre strings (Levenshtein simplificado)
+function similaridade(str1, str2) {
+    const s1 = normalizarTexto(str1);
+    const s2 = normalizarTexto(str2);
     
-    try {
-        // Buscar dados do período
-        const promises = [
-            new Promise((resolve) => {
-                db.all("SELECT * FROM arrecadacao WHERE strftime('%Y-%m', data) = ? ORDER BY data DESC", [mesAtual], (err, rows) => {
-                    resolve(rows || []);
-                });
-            }),
-            new Promise((resolve) => {
-                db.all("SELECT * FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1", [mesAtual], (err, rows) => {
-                    resolve(rows || []);
-                });
-            }),
-            new Promise((resolve) => {
-                db.all("SELECT * FROM contas_diarias WHERE strftime('%Y-%m', data) = ? ORDER BY data DESC", [mesAtual], (err, rows) => {
-                    resolve(rows || []);
-                });
-            })
-        ];
-        
-        const [arrecadacao, fixas, diarias] = await Promise.all(promises);
-        
-        // Calcular totais
-        const totalArrecadado = arrecadacao.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
-        const totalFixas = fixas.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
-        const totalDiarias = diarias.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0);
-        const totalGastos = totalFixas + totalDiarias;
-        const lucro = totalArrecadado - totalGastos;
-        
-        // Análise local inteligente (sem necessidade de API)
-        const analise = gerarAnaliseLocal(arrecadacao, fixas, diarias, totalArrecadado, totalGastos, lucro);
-        
-        // Se tiver chave OpenAI, fazer análise avançada
-        if (openai && tipo === 'avancada') {
-            try {
-                const prompt = criarPromptAnalise(arrecadacao, fixas, diarias, totalArrecadado, totalGastos, lucro);
-                const completion = await openai.chat.completions.create({
-                    model: "gpt-3.5-turbo",
-                    messages: [
-                        {
-                            role: "system",
-                            content: "Você é um consultor financeiro especializado em restaurantes. Analise os dados e forneça insights práticos e acionáveis."
-                        },
-                        {
-                            role: "user",
-                            content: prompt
-                        }
-                    ],
-                    max_tokens: 500,
-                    temperature: 0.7
-                });
-                
-                analise.iaAvancada = completion.choices[0].message.content;
-            } catch (error) {
-                console.error('Erro ao chamar OpenAI:', error);
-                analise.erroIA = 'Análise avançada temporariamente indisponível. Usando análise local.';
-            }
-        }
-        
-        res.json(analise);
-    } catch (error) {
-        console.error('Erro na análise:', error);
-        res.status(500).json({ error: 'Erro ao gerar análise' });
-    }
-});
-
-// Assistente virtual - chat com IA
-app.post('/api/ia/chat', authenticateToken, async (req, res) => {
-    const { pergunta } = req.body;
+    if (s1 === s2) return 1;
+    if (s1.includes(s2) || s2.includes(s1)) return 0.8;
     
-    if (!pergunta) {
-        return res.status(400).json({ error: 'Pergunta é obrigatória' });
+    // Verificar se são muito similares
+    const minLen = Math.min(s1.length, s2.length);
+    const maxLen = Math.max(s1.length, s2.length);
+    if (minLen / maxLen < 0.7) return 0;
+    
+    let matches = 0;
+    const minStr = s1.length < s2.length ? s1 : s2;
+    const maxStr = s1.length >= s2.length ? s1 : s2;
+    
+    for (let i = 0; i < minStr.length; i++) {
+        if (maxStr.includes(minStr[i])) matches++;
     }
     
-    try {
-        // Buscar contexto financeiro atual
-        const mesAtual = new Date().toISOString().slice(0, 7);
-        const contexto = await buscarContextoFinanceiro(mesAtual);
-        
-        if (openai) {
-            // Usar OpenAI para resposta inteligente
-            const completion = await openai.chat.completions.create({
-                model: "gpt-3.5-turbo",
-                messages: [
-                    {
-                        role: "system",
-                        content: `Você é um assistente financeiro especializado em restaurantes. 
-                        Analise os dados financeiros fornecidos e responda perguntas de forma clara e prática.
-                        Contexto atual: ${JSON.stringify(contexto)}`
-                    },
-                    {
-                        role: "user",
-                        content: pergunta
-                    }
-                ],
-                max_tokens: 300,
-                temperature: 0.7
-            });
-            
-            res.json({ resposta: completion.choices[0].message.content });
-        } else {
-            // Resposta local inteligente
-            const resposta = gerarRespostaLocal(pergunta, contexto);
-            res.json({ resposta });
-        }
-    } catch (error) {
-        console.error('Erro no chat:', error);
-        res.status(500).json({ error: 'Erro ao processar pergunta' });
-    }
-});
-
-// Recomendações inteligentes
-app.get('/api/ia/recomendacoes', authenticateToken, async (req, res) => {
-    const { mes } = req.query;
-    const mesAtual = mes || new Date().toISOString().slice(0, 7);
-    
-    try {
-        const contexto = await buscarContextoFinanceiro(mesAtual);
-        const recomendacoes = gerarRecomendacoes(contexto);
-        res.json(recomendacoes);
-    } catch (error) {
-        console.error('Erro nas recomendações:', error);
-        res.status(500).json({ error: 'Erro ao gerar recomendações' });
-    }
-});
-
-// Funções auxiliares
-function gerarAnaliseLocal(arrecadacao, fixas, diarias, totalArrecadado, totalGastos, lucro) {
-    const analise = {
-        periodo: new Date().toISOString().slice(0, 7),
-        resumo: {
-            arrecadado: totalArrecadado,
-            gastos: totalGastos,
-            lucro: lucro,
-            margem: totalArrecadado > 0 ? ((lucro / totalArrecadado) * 100).toFixed(2) : 0
-        },
-        insights: [],
-        alertas: [],
-        tendencias: []
-    };
-    
-    // Insights
-    if (lucro < 0) {
-        analise.insights.push({
-            tipo: 'alerta',
-            titulo: 'Prejuízo Detectado',
-            descricao: `O restaurante está com prejuízo de ${formatCurrency(Math.abs(lucro))}. É necessário revisar gastos ou aumentar arrecadação.`
-        });
-    } else if (lucro < totalArrecadado * 0.1) {
-        analise.insights.push({
-            tipo: 'atencao',
-            titulo: 'Margem Baixa',
-            descricao: `A margem de lucro está em ${analise.resumo.margem}%, abaixo do recomendado (10-15%).`
-        });
-    } else {
-        analise.insights.push({
-            tipo: 'sucesso',
-            titulo: 'Lucro Saudável',
-            descricao: `Excelente! Margem de lucro de ${analise.resumo.margem}%.`
-        });
-    }
-    
-    // Maior gasto
-    const todosGastos = [...fixas, ...diarias];
-    if (todosGastos.length > 0) {
-        const maiorGasto = todosGastos.reduce((max, item) => 
-            parseFloat(item.valor) > parseFloat(max.valor) ? item : max
-        );
-        analise.insights.push({
-            tipo: 'info',
-            titulo: 'Maior Gasto',
-            descricao: `${maiorGasto.nome}: ${formatCurrency(maiorGasto.valor)}`
-        });
-    }
-    
-    // Análise de frequência de gastos
-    const gastosPorNome = {};
-    diarias.forEach(item => {
-        const nome = item.nome.toLowerCase();
-        if (!gastosPorNome[nome]) {
-            gastosPorNome[nome] = { total: 0, vezes: 0 };
-        }
-        gastosPorNome[nome].total += parseFloat(item.valor);
-        gastosPorNome[nome].vezes++;
-    });
-    
-    const maisFrequente = Object.entries(gastosPorNome)
-        .sort((a, b) => b[1].vezes - a[1].vezes)[0];
-    
-    if (maisFrequente && maisFrequente[1].vezes > 3) {
-        analise.insights.push({
-            tipo: 'info',
-            titulo: 'Gasto Mais Frequente',
-            descricao: `${maisFrequente[0]} aparece ${maisFrequente[1].vezes} vezes no mês, totalizando ${formatCurrency(maisFrequente[1].total)}`
-        });
-    }
-    
-    // Alertas
-    if (totalGastos > totalArrecadado * 0.9) {
-        analise.alertas.push({
-            nivel: 'alto',
-            mensagem: 'Gastos muito próximos da arrecadação. Risco de prejuízo.'
-        });
-    }
-    
-    if (diarias.length === 0 && fixas.length === 0) {
-        analise.alertas.push({
-            nivel: 'info',
-            mensagem: 'Nenhum gasto registrado este mês. Verifique se todos foram lançados.'
-        });
-    }
-    
-    return analise;
-}
-
-function formatCurrency(value) {
-    return new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL'
-    }).format(value);
-}
-
-async function buscarContextoFinanceiro(mes) {
-    return new Promise((resolve) => {
-        const contexto = {};
-        
-        db.get("SELECT COALESCE(SUM(valor), 0) as total FROM arrecadacao WHERE strftime('%Y-%m', data) = ?", [mes], (err, row) => {
-            contexto.arrecadado = row.total;
-            
-            db.get("SELECT COALESCE(SUM(valor), 0) as total FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1", [mes], (err, row) => {
-                contexto.fixas = row.total;
-                
-                db.get("SELECT COALESCE(SUM(valor), 0) as total FROM contas_diarias WHERE strftime('%Y-%m', data) = ?", [mes], (err, row) => {
-                    contexto.diarias = row.total;
-                    contexto.totalGastos = contexto.fixas + contexto.diarias;
-                    contexto.lucro = contexto.arrecadado - contexto.totalGastos;
-                    resolve(contexto);
-                });
-            });
-        });
-    });
-}
-
-function gerarRecomendacoes(contexto) {
-    const recomendacoes = [];
-    
-    if (contexto.lucro < 0) {
-        recomendacoes.push({
-            prioridade: 'alta',
-            titulo: 'Reduzir Gastos',
-            descricao: 'Considere revisar gastos desnecessários ou negociar melhores preços com fornecedores.',
-            acao: 'Revisar contas fixas e diárias'
-        });
-    }
-    
-    if (contexto.diarias > contexto.fixas * 2) {
-        recomendacoes.push({
-            prioridade: 'media',
-            titulo: 'Gastos Diários Elevados',
-            descricao: 'Gastos diários estão muito altos. Considere criar mais contas fixas para melhor planejamento.',
-            acao: 'Analisar gastos diários recorrentes'
-        });
-    }
-    
-    if (contexto.arrecadado > 0 && (contexto.totalGastos / contexto.arrecadado) > 0.8) {
-        recomendacoes.push({
-            prioridade: 'alta',
-            titulo: 'Margem de Segurança Baixa',
-            descricao: 'Gastos representam mais de 80% da arrecadação. Risco alto de prejuízo.',
-            acao: 'Aumentar arrecadação ou reduzir custos'
-        });
-    }
-    
-    if (recomendacoes.length === 0) {
-        recomendacoes.push({
-            prioridade: 'baixa',
-            titulo: 'Situação Financeira Saudável',
-            descricao: 'Continue mantendo o controle e registrando todos os gastos.',
-            acao: 'Manter o bom trabalho!'
-        });
-    }
-    
-    return recomendacoes;
-}
-
-function criarPromptAnalise(arrecadacao, fixas, diarias, totalArrecadado, totalGastos, lucro) {
-    return `Analise os dados financeiros de um restaurante:
-
-ARRECADAÇÃO TOTAL: R$ ${totalArrecadado.toFixed(2)}
-GASTOS TOTAIS: R$ ${totalGastos.toFixed(2)}
-LUCRO: R$ ${lucro.toFixed(2)}
-
-CONTAS FIXAS (${fixas.length} itens):
-${fixas.map(f => `- ${f.nome}: R$ ${f.valor}`).join('\n')}
-
-GASTOS DIÁRIOS (${diarias.length} itens):
-${diarias.slice(0, 10).map(d => `- ${d.nome}: R$ ${d.valor}${d.descricao ? ' (' + d.descricao + ')' : ''}`).join('\n')}
-
-Forneça uma análise financeira prática com:
-1. Pontos fortes
-2. Pontos de atenção
-3. Recomendações específicas para restaurantes
-4. Previsão para o próximo mês (se possível)
-
-Seja objetivo e prático.`;
-}
-
-function gerarRespostaLocal(pergunta, contexto) {
-    const perguntaLower = pergunta.toLowerCase();
-    
-    if (perguntaLower.includes('lucro') || perguntaLower.includes('lucrar')) {
-        return `O lucro atual é de ${formatCurrency(contexto.lucro)}. ${contexto.lucro > 0 ? 'Situação positiva!' : 'Atenção: há prejuízo.'}`;
-    }
-    
-    if (perguntaLower.includes('gasto') || perguntaLower.includes('despesa')) {
-        return `Os gastos totais são de ${formatCurrency(contexto.totalGastos)}, sendo ${formatCurrency(contexto.fixas)} em contas fixas e ${formatCurrency(contexto.diarias)} em gastos diários.`;
-    }
-    
-    if (perguntaLower.includes('arrecadação') || perguntaLower.includes('receita')) {
-        return `A arrecadação total é de ${formatCurrency(contexto.arrecadado)}.`;
-    }
-    
-    if (perguntaLower.includes('recomendação') || perguntaLower.includes('sugestão')) {
-        if (contexto.lucro < 0) {
-            return 'Recomendo revisar os gastos, especialmente os diários, e considerar aumentar a arrecadação.';
-        }
-        return 'Continue mantendo o controle financeiro. Considere criar mais contas fixas para melhor planejamento.';
-    }
-    
-    return 'Analisando seus dados financeiros... Para uma análise mais detalhada, acesse a seção de Análise com IA no dashboard.';
+    return matches / maxLen;
 }
 
 // Rota raiz
