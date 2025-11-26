@@ -131,6 +131,41 @@ function createLog(usuario, acao, tabela, registroId, dadosAnteriores, dadosNovo
         [usuario, acao, tabela, registroId, JSON.stringify(dadosAnteriores), JSON.stringify(dadosNovos)]);
 }
 
+// Função auxiliar para normalizar texto (agrupar palavras similares)
+function normalizarTexto(texto) {
+    if (!texto) return '';
+    return texto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+        .trim()
+        .replace(/\s+/g, ' '); // Remove espaços extras
+}
+
+// Função para calcular similaridade entre strings
+function similaridade(str1, str2) {
+    const s1 = normalizarTexto(str1);
+    const s2 = normalizarTexto(str2);
+    
+    if (s1 === s2) return 1;
+    if (s1.includes(s2) || s2.includes(s1)) return 0.8;
+    
+    // Verificar se são muito similares
+    const minLen = Math.min(s1.length, s2.length);
+    const maxLen = Math.max(s1.length, s2.length);
+    if (minLen / maxLen < 0.7) return 0;
+    
+    let matches = 0;
+    const minStr = s1.length < s2.length ? s1 : s2;
+    const maxStr = s1.length >= s2.length ? s1 : s2;
+    
+    for (let i = 0; i < minStr.length; i++) {
+        if (maxStr.includes(minStr[i])) matches++;
+    }
+    
+    return matches / maxLen;
+}
+
 // ========== ROTAS DE AUTENTICAÇÃO ==========
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
@@ -925,41 +960,6 @@ app.get('/api/comparar-meses', authenticateToken, (req, res) => {
         });
     });
 });
-
-// Função auxiliar para normalizar texto (agrupar palavras similares)
-function normalizarTexto(texto) {
-    if (!texto) return '';
-    return texto
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '') // Remove acentos
-        .trim()
-        .replace(/\s+/g, ' '); // Remove espaços extras
-}
-
-// Função para calcular similaridade entre strings (Levenshtein simplificado)
-function similaridade(str1, str2) {
-    const s1 = normalizarTexto(str1);
-    const s2 = normalizarTexto(str2);
-    
-    if (s1 === s2) return 1;
-    if (s1.includes(s2) || s2.includes(s1)) return 0.8;
-    
-    // Verificar se são muito similares
-    const minLen = Math.min(s1.length, s2.length);
-    const maxLen = Math.max(s1.length, s2.length);
-    if (minLen / maxLen < 0.7) return 0;
-    
-    let matches = 0;
-    const minStr = s1.length < s2.length ? s1 : s2;
-    const maxStr = s1.length >= s2.length ? s1 : s2;
-    
-    for (let i = 0; i < minStr.length; i++) {
-        if (maxStr.includes(minStr[i])) matches++;
-    }
-    
-    return matches / maxLen;
-}
 
 // Rota raiz
 app.get('/', (req, res) => {
