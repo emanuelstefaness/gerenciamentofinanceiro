@@ -105,10 +105,19 @@ function initializeDatabase() {
 
     // Criar usuário admin padrão
     db.get("SELECT * FROM users WHERE username = ?", ['admin'], (err, row) => {
-        if (!row) {
+        if (err) {
+            console.error('Erro ao verificar usuário admin:', err.message);
+        } else if (!row) {
             const hashedPassword = bcrypt.hashSync('admin123', 10);
-            db.run("INSERT INTO users (username, password) VALUES (?, ?)", ['admin', hashedPassword]);
-            console.log('Usuário admin criado (username: admin, password: admin123)');
+            db.run("INSERT INTO users (username, password) VALUES (?, ?)", ['admin', hashedPassword], (err) => {
+                if (err) {
+                    console.error('Erro ao criar usuário admin:', err.message);
+                } else {
+                    console.log('✅ Usuário admin criado (username: admin, password: admin123)');
+                }
+            });
+        } else {
+            console.log('✅ Usuário admin já existe');
         }
     });
 }
