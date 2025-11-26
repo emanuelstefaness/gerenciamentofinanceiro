@@ -8,7 +8,8 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || process.env.BACK4APP_PORT || 3000;
+// Back4app define PORT automaticamente, usar 8080 como fallback
+const PORT = process.env.PORT || process.env.BACK4APP_PORT || 8080;
 const JWT_SECRET = process.env.JWT_SECRET || 'restaurante_financeiro_secret_key_2024';
 
 // Middleware
@@ -18,13 +19,19 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 // Inicializar banco de dados
-// No Back4app, usa caminho absoluto para persistência
-const dbPath = process.env.DATABASE_PATH || './restaurante.db';
+// No Back4app, usar caminho no diretório de trabalho
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'restaurante.db');
+console.log('Tentando conectar ao banco de dados em:', dbPath);
+console.log('Diretório atual:', __dirname);
+
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
-        console.error('Erro ao conectar ao banco de dados:', err.message);
+        console.error('❌ ERRO ao conectar ao banco de dados:', err.message);
+        console.error('Caminho tentado:', dbPath);
+        // Não encerrar o processo, apenas logar o erro
+        // O servidor pode iniciar mesmo sem banco (para debug)
     } else {
-        console.log('Conectado ao banco de dados SQLite em:', dbPath);
+        console.log('✅ Conectado ao banco de dados SQLite em:', dbPath);
         initializeDatabase();
     }
 });
@@ -967,9 +974,22 @@ app.get('/', (req, res) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`Acesse: http://localhost:${PORT}`);
+// Back4app requer que o servidor escute em 0.0.0.0 (todas as interfaces)
+// Adicionar tratamento de erro
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log('='.repeat(50));
+    console.log(`✅ Servidor rodando na porta ${PORT}`);
+    console.log(`✅ Escutando em 0.0.0.0:${PORT}`);
+    console.log(`✅ Aplicação pronta para receber requisições`);
+    console.log('='.repeat(50));
+});
+
+server.on('error', (err) => {
+    console.error('❌ Erro ao iniciar servidor:', err.message);
+    if (err.code === 'EADDRINUSE') {
+        console.error(`Porta ${PORT} já está em uso`);
+    }
+    process.exit(1);
 });
 
 // Fechar banco ao encerrar
