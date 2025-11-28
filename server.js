@@ -38,88 +38,131 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // Inicializar tabelas
 function initializeDatabase() {
-    // Tabela de usuários
-    db.run(`CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+    console.log('Iniciando criação das tabelas...');
+    
+    // Criar todas as tabelas de forma sequencial para garantir ordem
+    db.serialize(() => {
+        // Tabela de usuários (PRIMEIRA - mais importante)
+        db.run(`CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`, (err) => {
+            if (err) {
+                console.error('Erro ao criar tabela users:', err.message);
+            } else {
+                console.log('✅ Tabela users criada/verificada');
+            }
+        });
 
-    // Tabela de arrecadação diária
-    db.run(`CREATE TABLE IF NOT EXISTS arrecadacao (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data DATE NOT NULL,
-        valor REAL NOT NULL,
-        observacoes TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+        // Tabela de arrecadação diária
+        db.run(`CREATE TABLE IF NOT EXISTS arrecadacao (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data DATE NOT NULL,
+            valor REAL NOT NULL,
+            observacoes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`, (err) => {
+            if (err) {
+                console.error('Erro ao criar tabela arrecadacao:', err.message);
+            } else {
+                console.log('✅ Tabela arrecadacao criada/verificada');
+            }
+        });
 
-    // Tabela de contas fixas
-    db.run(`CREATE TABLE IF NOT EXISTS contas_fixas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        valor REAL NOT NULL,
-        mes_referencia TEXT NOT NULL,
-        recorrencia_mensal INTEGER DEFAULT 1,
-        ativo INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+        // Tabela de contas fixas
+        db.run(`CREATE TABLE IF NOT EXISTS contas_fixas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            valor REAL NOT NULL,
+            mes_referencia TEXT NOT NULL,
+            recorrencia_mensal INTEGER DEFAULT 1,
+            ativo INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`, (err) => {
+            if (err) {
+                console.error('Erro ao criar tabela contas_fixas:', err.message);
+            } else {
+                console.log('✅ Tabela contas_fixas criada/verificada');
+            }
+        });
 
-    // Tabela de contas semanais
-    db.run(`CREATE TABLE IF NOT EXISTS contas_semanais (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        valor REAL NOT NULL,
-        semana_referente TEXT NOT NULL,
-        descricao TEXT,
-        recorrencia_semanal INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+        // Tabela de contas semanais
+        db.run(`CREATE TABLE IF NOT EXISTS contas_semanais (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            valor REAL NOT NULL,
+            semana_referente TEXT NOT NULL,
+            descricao TEXT,
+            recorrencia_semanal INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`, (err) => {
+            if (err) {
+                console.error('Erro ao criar tabela contas_semanais:', err.message);
+            } else {
+                console.log('✅ Tabela contas_semanais criada/verificada');
+            }
+        });
 
-    // Tabela de contas diárias
-    db.run(`CREATE TABLE IF NOT EXISTS contas_diarias (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        valor REAL NOT NULL,
-        data DATE NOT NULL,
-        descricao TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+        // Tabela de contas diárias
+        db.run(`CREATE TABLE IF NOT EXISTS contas_diarias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data DATE NOT NULL,
+            descricao TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`, (err) => {
+            if (err) {
+                console.error('Erro ao criar tabela contas_diarias:', err.message);
+            } else {
+                console.log('✅ Tabela contas_diarias criada/verificada');
+            }
+        });
 
-    // Tabela de logs
-    db.run(`CREATE TABLE IF NOT EXISTS logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario TEXT,
-        acao TEXT NOT NULL,
-        tabela TEXT,
-        registro_id INTEGER,
-        dados_anteriores TEXT,
-        dados_novos TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+        // Tabela de logs
+        db.run(`CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT,
+            acao TEXT NOT NULL,
+            tabela TEXT,
+            registro_id INTEGER,
+            dados_anteriores TEXT,
+            dados_novos TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`, (err) => {
+            if (err) {
+                console.error('Erro ao criar tabela logs:', err.message);
+            } else {
+                console.log('✅ Tabela logs criada/verificada');
+            }
+        });
 
-    // Criar usuário admin padrão
-    db.get("SELECT * FROM users WHERE username = ?", ['admin'], (err, row) => {
-        if (err) {
-            console.error('Erro ao verificar usuário admin:', err.message);
-        } else if (!row) {
-            const hashedPassword = bcrypt.hashSync('admin123', 10);
-            db.run("INSERT INTO users (username, password) VALUES (?, ?)", ['admin', hashedPassword], (err) => {
-                if (err) {
-                    console.error('Erro ao criar usuário admin:', err.message);
-                } else {
-                    console.log('✅ Usuário admin criado (username: admin, password: admin123)');
-                }
-            });
-        } else {
-            console.log('✅ Usuário admin já existe');
-        }
+        // Criar usuário admin padrão (DEPOIS que a tabela users foi criada)
+        db.get("SELECT * FROM users WHERE username = ?", ['admin'], (err, row) => {
+            if (err) {
+                console.error('❌ Erro ao verificar usuário admin:', err.message);
+            } else if (!row) {
+                const hashedPassword = bcrypt.hashSync('admin123', 10);
+                db.run("INSERT INTO users (username, password) VALUES (?, ?)", ['admin', hashedPassword], (err) => {
+                    if (err) {
+                        console.error('❌ Erro ao criar usuário admin:', err.message);
+                    } else {
+                        console.log('✅ Usuário admin criado (username: admin, password: admin123)');
+                    }
+                });
+            } else {
+                console.log('✅ Usuário admin já existe');
+            }
+        });
     });
+    
+    console.log('✅ Inicialização do banco de dados concluída');
 }
 
 // Middleware de autenticação
