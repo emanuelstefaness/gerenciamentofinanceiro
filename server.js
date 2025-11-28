@@ -9,7 +9,7 @@ const fs = require('fs');
 
 const app = express();
 // Back4app define PORT automaticamente, usar 8080 como fallback
-const PORT = process.env.PORT || process.env.BACK4APP_PORT || 8080;
+const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'restaurante_financeiro_secret_key_2024';
 
 // Middleware
