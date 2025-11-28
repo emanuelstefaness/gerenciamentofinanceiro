@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const { createClient } = require('@libsql/client');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
@@ -18,62 +18,53 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-// Inicializar banco de dados
-// No Back4app, usar caminho no diretório de trabalho
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'restaurante.db');
-console.log('Tentando conectar ao banco de dados em:', dbPath);
-console.log('Diretório atual:', __dirname);
+// Inicializar banco de dados Turso
+const TURSO_URL = process.env.TURSO_DATABASE_URL || 'libsql://financeiro-manustefanees.aws-us-east-1.turso.io';
+const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjQzNTE5NDksImlkIjoiNmY4MDBiZDQtM2M2Yi00MzYzLThhNGYtMTkzZWU0NDVhNmYzIiwicmlkIjoiZDI5NmQ3MGItNjNiYS00ZmU0LTg0NzEtYzBkYzc4YWQxNzY2In0.Zebw4EpHyQj8OjmJ9EUU3Asg0wJLac7rYZOSD-La6I8WfR00fNdtaXBtzmnQavJRqrBVXX_dGq_3uKbc1TE5Aw';
 
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('❌ ERRO ao conectar ao banco de dados:', err.message);
-        console.error('Caminho tentado:', dbPath);
-        // Não encerrar o processo, apenas logar o erro
-        // O servidor pode iniciar mesmo sem banco (para debug)
-    } else {
-        console.log('✅ Conectado ao banco de dados SQLite em:', dbPath);
-        initializeDatabase();
-    }
+console.log('Conectando ao banco de dados Turso...');
+const db = createClient({
+    url: TURSO_URL,
+    authToken: TURSO_AUTH_TOKEN
 });
 
+// Inicializar banco de forma assíncrona
+(async () => {
+    try {
+        await initializeDatabase();
+        console.log('✅ Banco de dados inicializado com sucesso');
+    } catch (err) {
+        console.error('❌ Erro ao inicializar banco:', err);
+    }
+})();
+
 // Inicializar tabelas
-function initializeDatabase() {
+async function initializeDatabase() {
     console.log('Iniciando criação das tabelas...');
     
-    // Criar todas as tabelas de forma sequencial para garantir ordem
-    db.serialize(() => {
+    try {
         // Tabela de usuários (PRIMEIRA - mais importante)
-        db.run(`CREATE TABLE IF NOT EXISTS users (
+        await db.execute(`CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`, (err) => {
-            if (err) {
-                console.error('Erro ao criar tabela users:', err.message);
-            } else {
-                console.log('✅ Tabela users criada/verificada');
-            }
-        });
+        )`);
+        console.log('✅ Tabela users criada/verificada');
 
         // Tabela de arrecadação diária
-        db.run(`CREATE TABLE IF NOT EXISTS arrecadacao (
+        await db.execute(`CREATE TABLE IF NOT EXISTS arrecadacao (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             data DATE NOT NULL,
             valor REAL NOT NULL,
             observacoes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`, (err) => {
-            if (err) {
-                console.error('Erro ao criar tabela arrecadacao:', err.message);
-            } else {
-                console.log('✅ Tabela arrecadacao criada/verificada');
-            }
-        });
+        )`);
+        console.log('✅ Tabela arrecadacao criada/verificada');
 
         // Tabela de contas fixas
-        db.run(`CREATE TABLE IF NOT EXISTS contas_fixas (
+        await db.execute(`CREATE TABLE IF NOT EXISTS contas_fixas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
             valor REAL NOT NULL,
@@ -82,16 +73,11 @@ function initializeDatabase() {
             ativo INTEGER DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`, (err) => {
-            if (err) {
-                console.error('Erro ao criar tabela contas_fixas:', err.message);
-            } else {
-                console.log('✅ Tabela contas_fixas criada/verificada');
-            }
-        });
+        )`);
+        console.log('✅ Tabela contas_fixas criada/verificada');
 
         // Tabela de contas semanais
-        db.run(`CREATE TABLE IF NOT EXISTS contas_semanais (
+        await db.execute(`CREATE TABLE IF NOT EXISTS contas_semanais (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
             valor REAL NOT NULL,
@@ -100,16 +86,11 @@ function initializeDatabase() {
             recorrencia_semanal INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`, (err) => {
-            if (err) {
-                console.error('Erro ao criar tabela contas_semanais:', err.message);
-            } else {
-                console.log('✅ Tabela contas_semanais criada/verificada');
-            }
-        });
+        )`);
+        console.log('✅ Tabela contas_semanais criada/verificada');
 
         // Tabela de contas diárias
-        db.run(`CREATE TABLE IF NOT EXISTS contas_diarias (
+        await db.execute(`CREATE TABLE IF NOT EXISTS contas_diarias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
             valor REAL NOT NULL,
@@ -117,16 +98,11 @@ function initializeDatabase() {
             descricao TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`, (err) => {
-            if (err) {
-                console.error('Erro ao criar tabela contas_diarias:', err.message);
-            } else {
-                console.log('✅ Tabela contas_diarias criada/verificada');
-            }
-        });
+        )`);
+        console.log('✅ Tabela contas_diarias criada/verificada');
 
         // Tabela de logs
-        db.run(`CREATE TABLE IF NOT EXISTS logs (
+        await db.execute(`CREATE TABLE IF NOT EXISTS logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             usuario TEXT,
             acao TEXT NOT NULL,
@@ -135,34 +111,31 @@ function initializeDatabase() {
             dados_anteriores TEXT,
             dados_novos TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`, (err) => {
-            if (err) {
-                console.error('Erro ao criar tabela logs:', err.message);
-            } else {
-                console.log('✅ Tabela logs criada/verificada');
-            }
-        });
+        )`);
+        console.log('✅ Tabela logs criada/verificada');
 
         // Criar usuário admin padrão (DEPOIS que a tabela users foi criada)
-        db.get("SELECT * FROM users WHERE username = ?", ['admin'], (err, row) => {
-            if (err) {
-                console.error('❌ Erro ao verificar usuário admin:', err.message);
-            } else if (!row) {
-                const hashedPassword = bcrypt.hashSync('admin123', 10);
-                db.run("INSERT INTO users (username, password) VALUES (?, ?)", ['admin', hashedPassword], (err) => {
-                    if (err) {
-                        console.error('❌ Erro ao criar usuário admin:', err.message);
-                    } else {
-                        console.log('✅ Usuário admin criado (username: admin, password: admin123)');
-                    }
-                });
-            } else {
-                console.log('✅ Usuário admin já existe');
-            }
+        const adminCheck = await db.execute({
+            sql: "SELECT * FROM users WHERE username = ?",
+            args: ['admin']
         });
-    });
-    
-    console.log('✅ Inicialização do banco de dados concluída');
+        
+        if (adminCheck.rows.length === 0) {
+            const hashedPassword = bcrypt.hashSync('admin123', 10);
+            await db.execute({
+                sql: "INSERT INTO users (username, password) VALUES (?, ?)",
+                args: ['admin', hashedPassword]
+            });
+            console.log('✅ Usuário admin criado (username: admin, password: admin123)');
+        } else {
+            console.log('✅ Usuário admin já existe');
+        }
+        
+        console.log('✅ Inicialização do banco de dados concluída');
+    } catch (err) {
+        console.error('❌ Erro ao inicializar banco:', err.message);
+        throw err;
+    }
 }
 
 // Middleware de autenticação
@@ -183,11 +156,17 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// Função para criar log
-function createLog(usuario, acao, tabela, registroId, dadosAnteriores, dadosNovos) {
-    db.run(`INSERT INTO logs (usuario, acao, tabela, registro_id, dados_anteriores, dados_novos) 
-            VALUES (?, ?, ?, ?, ?, ?)`,
-        [usuario, acao, tabela, registroId, JSON.stringify(dadosAnteriores), JSON.stringify(dadosNovos)]);
+// Função para criar log (async)
+async function createLog(usuario, acao, tabela, registroId, dadosAnteriores, dadosNovos) {
+    try {
+        await db.execute({
+            sql: `INSERT INTO logs (usuario, acao, tabela, registro_id, dados_anteriores, dados_novos) 
+                  VALUES (?, ?, ?, ?, ?, ?)`,
+            args: [usuario, acao, tabela, registroId, JSON.stringify(dadosAnteriores), JSON.stringify(dadosNovos)]
+        });
+    } catch (err) {
+        console.error('Erro ao criar log:', err.message);
+    }
 }
 
 // Função auxiliar para normalizar texto (agrupar palavras similares)
@@ -226,347 +205,491 @@ function similaridade(str1, str2) {
 }
 
 // ========== ROTAS DE AUTENTICAÇÃO ==========
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
 
-    db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
-        if (err) {
-            return res.status(500).json({ error: 'Erro no servidor' });
-        }
+        const result = await db.execute({
+            sql: "SELECT * FROM users WHERE username = ?",
+            args: [username]
+        });
+
+        const user = result.rows[0];
         if (!user || !bcrypt.compareSync(password, user.password)) {
             return res.status(401).json({ error: 'Credenciais inválidas' });
         }
 
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
         res.json({ token, username: user.username });
-    });
+    } catch (err) {
+        console.error('Erro no login:', err);
+        res.status(500).json({ error: 'Erro no servidor' });
+    }
 });
 
-app.post('/api/register', (req, res) => {
-    const { username, password } = req.body;
+app.post('/api/register', async (req, res) => {
+    try {
+        const { username, password } = req.body;
 
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Username e senha são obrigatórios' });
-    }
-
-    const hashedPassword = bcrypt.hashSync(password, 10);
-
-    db.run("INSERT INTO users (username, password) VALUES (?, ?)", [username, hashedPassword], function(err) {
-        if (err) {
-            if (err.message.includes('UNIQUE')) {
-                return res.status(400).json({ error: 'Username já existe' });
-            }
-            return res.status(500).json({ error: 'Erro ao criar usuário' });
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username e senha são obrigatórios' });
         }
-        res.json({ message: 'Usuário criado com sucesso', id: this.lastID });
-    });
+
+        const hashedPassword = bcrypt.hashSync(password, 10);
+
+        const result = await db.execute({
+            sql: "INSERT INTO users (username, password) VALUES (?, ?)",
+            args: [username, hashedPassword]
+        });
+
+        res.json({ message: 'Usuário criado com sucesso', id: result.lastInsertRowid });
+    } catch (err) {
+        if (err.message && err.message.includes('UNIQUE')) {
+            return res.status(400).json({ error: 'Username já existe' });
+        }
+        console.error('Erro ao criar usuário:', err);
+        res.status(500).json({ error: 'Erro ao criar usuário' });
+    }
 });
 
 // ========== ROTAS DE ARRECADAÇÃO ==========
-app.get('/api/arrecadacao', authenticateToken, (req, res) => {
-    const { data_inicio, data_fim, mes, semana } = req.query;
-    let query = "SELECT * FROM arrecadacao WHERE 1=1";
-    const params = [];
+app.get('/api/arrecadacao', authenticateToken, async (req, res) => {
+    try {
+        const { data_inicio, data_fim, mes, semana } = req.query;
+        let query = "SELECT * FROM arrecadacao WHERE 1=1";
+        const args = [];
 
-    if (data_inicio && data_fim) {
-        query += " AND data BETWEEN ? AND ?";
-        params.push(data_inicio, data_fim);
-    } else if (mes) {
-        query += " AND strftime('%Y-%m', data) = ?";
-        params.push(mes);
-    } else if (semana) {
-        query += " AND strftime('%Y-W%W', data) = ?";
-        params.push(semana);
-    }
-
-    query += " ORDER BY data DESC";
-
-    db.all(query, params, (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        if (data_inicio && data_fim) {
+            query += " AND data BETWEEN ? AND ?";
+            args.push(data_inicio, data_fim);
+        } else if (mes) {
+            query += " AND strftime('%Y-%m', data) = ?";
+            args.push(mes);
+        } else if (semana) {
+            query += " AND strftime('%Y-W%W', data) = ?";
+            args.push(semana);
         }
+
+        query += " ORDER BY data DESC";
+
+        const result = await db.execute({ sql: query, args });
+        const rows = result.rows.map(row => ({
+            id: row.id,
+            data: row.data,
+            valor: row.valor,
+            observacoes: row.observacoes,
+            created_at: row.created_at,
+            updated_at: row.updated_at
+        }));
         res.json(rows);
-    });
+    } catch (err) {
+        console.error('Erro ao buscar arrecadação:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/arrecadacao', authenticateToken, (req, res) => {
-    const { data, valor, observacoes } = req.body;
+app.post('/api/arrecadacao', authenticateToken, async (req, res) => {
+    try {
+        const { data, valor, observacoes } = req.body;
 
-    db.run("INSERT INTO arrecadacao (data, valor, observacoes) VALUES (?, ?, ?)",
-        [data, valor, observacoes || null], function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            createLog(req.user.username, 'CREATE', 'arrecadacao', this.lastID, null, req.body);
-            res.json({ id: this.lastID, message: 'Arrecadação registrada com sucesso' });
+        const result = await db.execute({
+            sql: "INSERT INTO arrecadacao (data, valor, observacoes) VALUES (?, ?, ?)",
+            args: [data, valor, observacoes || null]
         });
+
+        await createLog(req.user.username, 'CREATE', 'arrecadacao', result.lastInsertRowid, null, req.body);
+        res.json({ id: result.lastInsertRowid, message: 'Arrecadação registrada com sucesso' });
+    } catch (err) {
+        console.error('Erro ao criar arrecadação:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.put('/api/arrecadacao/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
-    const { data, valor, observacoes } = req.body;
+app.put('/api/arrecadacao/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, valor, observacoes } = req.body;
 
-    db.get("SELECT * FROM arrecadacao WHERE id = ?", [id], (err, oldRow) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        const oldResult = await db.execute({
+            sql: "SELECT * FROM arrecadacao WHERE id = ?",
+            args: [id]
+        });
+
+        if (oldResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Arrecadação não encontrada' });
         }
 
-        db.run("UPDATE arrecadacao SET data = ?, valor = ?, observacoes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [data, valor, observacoes || null, id], function(err) {
-                if (err) {
-                    return res.status(500).json({ error: err.message });
-                }
-                createLog(req.user.username, 'UPDATE', 'arrecadacao', id, oldRow, req.body);
-                res.json({ message: 'Arrecadação atualizada com sucesso' });
-            });
-    });
+        const oldRow = oldResult.rows[0];
+
+        await db.execute({
+            sql: "UPDATE arrecadacao SET data = ?, valor = ?, observacoes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            args: [data, valor, observacoes || null, id]
+        });
+
+        await createLog(req.user.username, 'UPDATE', 'arrecadacao', id, oldRow, req.body);
+        res.json({ message: 'Arrecadação atualizada com sucesso' });
+    } catch (err) {
+        console.error('Erro ao atualizar arrecadação:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.delete('/api/arrecadacao/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
+app.delete('/api/arrecadacao/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
 
-    db.get("SELECT * FROM arrecadacao WHERE id = ?", [id], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        const result = await db.execute({
+            sql: "SELECT * FROM arrecadacao WHERE id = ?",
+            args: [id]
+        });
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Arrecadação não encontrada' });
         }
 
-        db.run("DELETE FROM arrecadacao WHERE id = ?", [id], function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            createLog(req.user.username, 'DELETE', 'arrecadacao', id, row, null);
-            res.json({ message: 'Arrecadação excluída com sucesso' });
+        const row = result.rows[0];
+
+        await db.execute({
+            sql: "DELETE FROM arrecadacao WHERE id = ?",
+            args: [id]
         });
-    });
+
+        await createLog(req.user.username, 'DELETE', 'arrecadacao', id, row, null);
+        res.json({ message: 'Arrecadação excluída com sucesso' });
+    } catch (err) {
+        console.error('Erro ao excluir arrecadação:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ========== ROTAS DE CONTAS FIXAS ==========
-app.get('/api/contas-fixas', authenticateToken, (req, res) => {
-    const { mes } = req.query;
-    let query = "SELECT * FROM contas_fixas WHERE 1=1";
-    const params = [];
+app.get('/api/contas-fixas', authenticateToken, async (req, res) => {
+    try {
+        const { mes } = req.query;
+        let query = "SELECT * FROM contas_fixas WHERE 1=1";
+        const args = [];
 
-    if (mes) {
-        query += " AND mes_referencia = ?";
-        params.push(mes);
-    }
-
-    query += " ORDER BY mes_referencia DESC, nome ASC";
-
-    db.all(query, params, (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        if (mes) {
+            query += " AND mes_referencia = ?";
+            args.push(mes);
         }
+
+        query += " ORDER BY mes_referencia DESC, nome ASC";
+
+        const result = await db.execute({ sql: query, args });
+        const rows = result.rows.map(row => ({
+            id: row.id,
+            nome: row.nome,
+            valor: row.valor,
+            mes_referencia: row.mes_referencia,
+            recorrencia_mensal: row.recorrencia_mensal,
+            ativo: row.ativo,
+            created_at: row.created_at,
+            updated_at: row.updated_at
+        }));
         res.json(rows);
-    });
+    } catch (err) {
+        console.error('Erro ao buscar contas fixas:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/contas-fixas', authenticateToken, (req, res) => {
-    const { nome, valor, mes_referencia, recorrencia_mensal } = req.body;
+app.post('/api/contas-fixas', authenticateToken, async (req, res) => {
+    try {
+        const { nome, valor, mes_referencia, recorrencia_mensal } = req.body;
 
-    db.run("INSERT INTO contas_fixas (nome, valor, mes_referencia, recorrencia_mensal) VALUES (?, ?, ?, ?)",
-        [nome, valor, mes_referencia, recorrencia_mensal || 1], function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            createLog(req.user.username, 'CREATE', 'contas_fixas', this.lastID, null, req.body);
-            res.json({ id: this.lastID, message: 'Conta fixa criada com sucesso' });
+        const result = await db.execute({
+            sql: "INSERT INTO contas_fixas (nome, valor, mes_referencia, recorrencia_mensal) VALUES (?, ?, ?, ?)",
+            args: [nome, valor, mes_referencia, recorrencia_mensal || 1]
         });
+
+        await createLog(req.user.username, 'CREATE', 'contas_fixas', result.lastInsertRowid, null, req.body);
+        res.json({ id: result.lastInsertRowid, message: 'Conta fixa criada com sucesso' });
+    } catch (err) {
+        console.error('Erro ao criar conta fixa:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.put('/api/contas-fixas/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
-    const { nome, valor, mes_referencia, recorrencia_mensal, ativo } = req.body;
+app.put('/api/contas-fixas/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nome, valor, mes_referencia, recorrencia_mensal, ativo } = req.body;
 
-    db.get("SELECT * FROM contas_fixas WHERE id = ?", [id], (err, oldRow) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        const oldResult = await db.execute({
+            sql: "SELECT * FROM contas_fixas WHERE id = ?",
+            args: [id]
+        });
+
+        if (oldResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Conta fixa não encontrada' });
         }
 
-        db.run("UPDATE contas_fixas SET nome = ?, valor = ?, mes_referencia = ?, recorrencia_mensal = ?, ativo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [nome, valor, mes_referencia, recorrencia_mensal || 1, ativo !== undefined ? ativo : 1, id], function(err) {
-                if (err) {
-                    return res.status(500).json({ error: err.message });
-                }
-                createLog(req.user.username, 'UPDATE', 'contas_fixas', id, oldRow, req.body);
-                res.json({ message: 'Conta fixa atualizada com sucesso' });
-            });
-    });
+        const oldRow = oldResult.rows[0];
+
+        await db.execute({
+            sql: "UPDATE contas_fixas SET nome = ?, valor = ?, mes_referencia = ?, recorrencia_mensal = ?, ativo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            args: [nome, valor, mes_referencia, recorrencia_mensal || 1, ativo !== undefined ? ativo : 1, id]
+        });
+
+        await createLog(req.user.username, 'UPDATE', 'contas_fixas', id, oldRow, req.body);
+        res.json({ message: 'Conta fixa atualizada com sucesso' });
+    } catch (err) {
+        console.error('Erro ao atualizar conta fixa:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.delete('/api/contas-fixas/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
+app.delete('/api/contas-fixas/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
 
-    db.get("SELECT * FROM contas_fixas WHERE id = ?", [id], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        const result = await db.execute({
+            sql: "SELECT * FROM contas_fixas WHERE id = ?",
+            args: [id]
+        });
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Conta fixa não encontrada' });
         }
 
-        db.run("DELETE FROM contas_fixas WHERE id = ?", [id], function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            createLog(req.user.username, 'DELETE', 'contas_fixas', id, row, null);
-            res.json({ message: 'Conta fixa excluída com sucesso' });
+        const row = result.rows[0];
+
+        await db.execute({
+            sql: "DELETE FROM contas_fixas WHERE id = ?",
+            args: [id]
         });
-    });
+
+        await createLog(req.user.username, 'DELETE', 'contas_fixas', id, row, null);
+        res.json({ message: 'Conta fixa excluída com sucesso' });
+    } catch (err) {
+        console.error('Erro ao excluir conta fixa:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ========== ROTAS DE CONTAS SEMANAIS ==========
-app.get('/api/contas-semanais', authenticateToken, (req, res) => {
-    const { semana, nome } = req.query;
-    let query = "SELECT * FROM contas_semanais WHERE 1=1";
-    const params = [];
+app.get('/api/contas-semanais', authenticateToken, async (req, res) => {
+    try {
+        const { semana, nome } = req.query;
+        let query = "SELECT * FROM contas_semanais WHERE 1=1";
+        const args = [];
 
-    if (semana) {
-        query += " AND semana_referente = ?";
-        params.push(semana);
-    }
-    if (nome) {
-        query += " AND nome LIKE ?";
-        params.push(`%${nome}%`);
-    }
-
-    query += " ORDER BY semana_referente DESC, nome ASC";
-
-    db.all(query, params, (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        if (semana) {
+            query += " AND semana_referente = ?";
+            args.push(semana);
         }
+        if (nome) {
+            query += " AND nome LIKE ?";
+            args.push(`%${nome}%`);
+        }
+
+        query += " ORDER BY semana_referente DESC, nome ASC";
+
+        const result = await db.execute({ sql: query, args });
+        const rows = result.rows.map(row => ({
+            id: row.id,
+            nome: row.nome,
+            valor: row.valor,
+            semana_referente: row.semana_referente,
+            descricao: row.descricao,
+            recorrencia_semanal: row.recorrencia_semanal,
+            created_at: row.created_at,
+            updated_at: row.updated_at
+        }));
         res.json(rows);
-    });
+    } catch (err) {
+        console.error('Erro ao buscar contas semanais:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/contas-semanais', authenticateToken, (req, res) => {
-    const { nome, valor, semana_referente, descricao, recorrencia_semanal } = req.body;
+app.post('/api/contas-semanais', authenticateToken, async (req, res) => {
+    try {
+        const { nome, valor, semana_referente, descricao, recorrencia_semanal } = req.body;
 
-    db.run("INSERT INTO contas_semanais (nome, valor, semana_referente, descricao, recorrencia_semanal) VALUES (?, ?, ?, ?, ?)",
-        [nome, valor, semana_referente, descricao || null, recorrencia_semanal || 0], function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            createLog(req.user.username, 'CREATE', 'contas_semanais', this.lastID, null, req.body);
-            res.json({ id: this.lastID, message: 'Conta semanal criada com sucesso' });
+        const result = await db.execute({
+            sql: "INSERT INTO contas_semanais (nome, valor, semana_referente, descricao, recorrencia_semanal) VALUES (?, ?, ?, ?, ?)",
+            args: [nome, valor, semana_referente, descricao || null, recorrencia_semanal || 0]
         });
+
+        await createLog(req.user.username, 'CREATE', 'contas_semanais', result.lastInsertRowid, null, req.body);
+        res.json({ id: result.lastInsertRowid, message: 'Conta semanal criada com sucesso' });
+    } catch (err) {
+        console.error('Erro ao criar conta semanal:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.put('/api/contas-semanais/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
-    const { nome, valor, semana_referente, descricao, recorrencia_semanal } = req.body;
+app.put('/api/contas-semanais/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nome, valor, semana_referente, descricao, recorrencia_semanal } = req.body;
 
-    db.get("SELECT * FROM contas_semanais WHERE id = ?", [id], (err, oldRow) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        const oldResult = await db.execute({
+            sql: "SELECT * FROM contas_semanais WHERE id = ?",
+            args: [id]
+        });
+
+        if (oldResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Conta semanal não encontrada' });
         }
 
-        db.run("UPDATE contas_semanais SET nome = ?, valor = ?, semana_referente = ?, descricao = ?, recorrencia_semanal = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [nome, valor, semana_referente, descricao || null, recorrencia_semanal || 0, id], function(err) {
-                if (err) {
-                    return res.status(500).json({ error: err.message });
-                }
-                createLog(req.user.username, 'UPDATE', 'contas_semanais', id, oldRow, req.body);
-                res.json({ message: 'Conta semanal atualizada com sucesso' });
-            });
-    });
+        const oldRow = oldResult.rows[0];
+
+        await db.execute({
+            sql: "UPDATE contas_semanais SET nome = ?, valor = ?, semana_referente = ?, descricao = ?, recorrencia_semanal = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            args: [nome, valor, semana_referente, descricao || null, recorrencia_semanal || 0, id]
+        });
+
+        await createLog(req.user.username, 'UPDATE', 'contas_semanais', id, oldRow, req.body);
+        res.json({ message: 'Conta semanal atualizada com sucesso' });
+    } catch (err) {
+        console.error('Erro ao atualizar conta semanal:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.delete('/api/contas-semanais/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
+app.delete('/api/contas-semanais/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
 
-    db.get("SELECT * FROM contas_semanais WHERE id = ?", [id], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        const result = await db.execute({
+            sql: "SELECT * FROM contas_semanais WHERE id = ?",
+            args: [id]
+        });
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Conta semanal não encontrada' });
         }
 
-        db.run("DELETE FROM contas_semanais WHERE id = ?", [id], function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            createLog(req.user.username, 'DELETE', 'contas_semanais', id, row, null);
-            res.json({ message: 'Conta semanal excluída com sucesso' });
+        const row = result.rows[0];
+
+        await db.execute({
+            sql: "DELETE FROM contas_semanais WHERE id = ?",
+            args: [id]
         });
-    });
+
+        await createLog(req.user.username, 'DELETE', 'contas_semanais', id, row, null);
+        res.json({ message: 'Conta semanal excluída com sucesso' });
+    } catch (err) {
+        console.error('Erro ao excluir conta semanal:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ========== ROTAS DE CONTAS DIÁRIAS ==========
-app.get('/api/contas-diarias', authenticateToken, (req, res) => {
-    const { data_inicio, data_fim, mes, semana, dia } = req.query;
-    let query = "SELECT * FROM contas_diarias WHERE 1=1";
-    const params = [];
+app.get('/api/contas-diarias', authenticateToken, async (req, res) => {
+    try {
+        const { data_inicio, data_fim, mes, semana, dia } = req.query;
+        let query = "SELECT * FROM contas_diarias WHERE 1=1";
+        const args = [];
 
-    if (data_inicio && data_fim) {
-        query += " AND data BETWEEN ? AND ?";
-        params.push(data_inicio, data_fim);
-    } else if (mes) {
-        query += " AND strftime('%Y-%m', data) = ?";
-        params.push(mes);
-    } else if (semana) {
-        query += " AND strftime('%Y-W%W', data) = ?";
-        params.push(semana);
-    } else if (dia) {
-        query += " AND data = ?";
-        params.push(dia);
-    }
-
-    query += " ORDER BY created_at DESC, nome ASC";
-
-    db.all(query, params, (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        if (data_inicio && data_fim) {
+            query += " AND data BETWEEN ? AND ?";
+            args.push(data_inicio, data_fim);
+        } else if (mes) {
+            query += " AND strftime('%Y-%m', data) = ?";
+            args.push(mes);
+        } else if (semana) {
+            query += " AND strftime('%Y-W%W', data) = ?";
+            args.push(semana);
+        } else if (dia) {
+            query += " AND data = ?";
+            args.push(dia);
         }
+
+        query += " ORDER BY created_at DESC, nome ASC";
+
+        const result = await db.execute({ sql: query, args });
+        const rows = result.rows.map(row => ({
+            id: row.id,
+            nome: row.nome,
+            valor: row.valor,
+            data: row.data,
+            descricao: row.descricao,
+            created_at: row.created_at,
+            updated_at: row.updated_at
+        }));
         res.json(rows);
-    });
+    } catch (err) {
+        console.error('Erro ao buscar contas diárias:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/contas-diarias', authenticateToken, (req, res) => {
-    const { nome, valor, data, descricao } = req.body;
+app.post('/api/contas-diarias', authenticateToken, async (req, res) => {
+    try {
+        const { nome, valor, data, descricao } = req.body;
 
-    db.run("INSERT INTO contas_diarias (nome, valor, data, descricao) VALUES (?, ?, ?, ?)",
-        [nome, valor, data, descricao || null], function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            createLog(req.user.username, 'CREATE', 'contas_diarias', this.lastID, null, req.body);
-            res.json({ id: this.lastID, message: 'Conta diária criada com sucesso' });
+        const result = await db.execute({
+            sql: "INSERT INTO contas_diarias (nome, valor, data, descricao) VALUES (?, ?, ?, ?)",
+            args: [nome, valor, data, descricao || null]
         });
+
+        await createLog(req.user.username, 'CREATE', 'contas_diarias', result.lastInsertRowid, null, req.body);
+        res.json({ id: result.lastInsertRowid, message: 'Conta diária criada com sucesso' });
+    } catch (err) {
+        console.error('Erro ao criar conta diária:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.put('/api/contas-diarias/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
-    const { nome, valor, data, descricao } = req.body;
+app.put('/api/contas-diarias/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nome, valor, data, descricao } = req.body;
 
-    db.get("SELECT * FROM contas_diarias WHERE id = ?", [id], (err, oldRow) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        const oldResult = await db.execute({
+            sql: "SELECT * FROM contas_diarias WHERE id = ?",
+            args: [id]
+        });
+
+        if (oldResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Conta diária não encontrada' });
         }
 
-        db.run("UPDATE contas_diarias SET nome = ?, valor = ?, data = ?, descricao = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [nome, valor, data, descricao || null, id], function(err) {
-                if (err) {
-                    return res.status(500).json({ error: err.message });
-                }
-                createLog(req.user.username, 'UPDATE', 'contas_diarias', id, oldRow, req.body);
-                res.json({ message: 'Conta diária atualizada com sucesso' });
-            });
-    });
+        const oldRow = oldResult.rows[0];
+
+        await db.execute({
+            sql: "UPDATE contas_diarias SET nome = ?, valor = ?, data = ?, descricao = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            args: [nome, valor, data, descricao || null, id]
+        });
+
+        await createLog(req.user.username, 'UPDATE', 'contas_diarias', id, oldRow, req.body);
+        res.json({ message: 'Conta diária atualizada com sucesso' });
+    } catch (err) {
+        console.error('Erro ao atualizar conta diária:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.delete('/api/contas-diarias/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
+app.delete('/api/contas-diarias/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
 
-    db.get("SELECT * FROM contas_diarias WHERE id = ?", [id], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
+        const result = await db.execute({
+            sql: "SELECT * FROM contas_diarias WHERE id = ?",
+            args: [id]
+        });
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Conta diária não encontrada' });
         }
 
-        db.run("DELETE FROM contas_diarias WHERE id = ?", [id], function(err) {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            createLog(req.user.username, 'DELETE', 'contas_diarias', id, row, null);
-            res.json({ message: 'Conta diária excluída com sucesso' });
+        const row = result.rows[0];
+
+        await db.execute({
+            sql: "DELETE FROM contas_diarias WHERE id = ?",
+            args: [id]
         });
-    });
+
+        await createLog(req.user.username, 'DELETE', 'contas_diarias', id, row, null);
+        res.json({ message: 'Conta diária excluída com sucesso' });
+    } catch (err) {
+        console.error('Erro ao excluir conta diária:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ========== ROTAS DE RELATÓRIOS COMPLETOS ==========
@@ -603,74 +726,62 @@ app.get('/api/relatorios', authenticateToken, async (req, res) => {
         }
 
         const promises = {
-            arrecadacao: new Promise((resolve) => {
-                let query = "SELECT * FROM arrecadacao WHERE data BETWEEN ? AND ?";
-                const params = [periodoInicio, periodoFim];
-                db.all(query, params, (err, rows) => {
-                    resolve(rows || []);
+            arrecadacao: (async () => {
+                const result = await db.execute({
+                    sql: "SELECT * FROM arrecadacao WHERE data BETWEEN ? AND ?",
+                    args: [periodoInicio, periodoFim]
                 });
-            }),
-            fixas: new Promise((resolve) => {
+                return result.rows || [];
+            })(),
+            fixas: (async () => {
+                if (categoria && categoria !== 'fixa') return [];
                 let query = "SELECT * FROM contas_fixas WHERE 1=1";
-                const params = [];
+                const args = [];
                 if (mes) {
                     query += " AND mes_referencia = ?";
-                    params.push(mes);
+                    args.push(mes);
                 }
                 if (nome) {
                     query += " AND nome LIKE ?";
-                    params.push(`%${nome}%`);
+                    args.push(`%${nome}%`);
                 }
-                if (!categoria || categoria === 'fixa') {
-                    db.all(query, params, (err, rows) => {
-                        resolve(rows || []);
-                    });
-                } else {
-                    resolve([]);
-                }
-            }),
-            semanais: new Promise((resolve) => {
+                const result = await db.execute({ sql: query, args });
+                return result.rows || [];
+            })(),
+            semanais: (async () => {
+                if (categoria && categoria !== 'semanal') return [];
                 let query = "SELECT * FROM contas_semanais WHERE 1=1";
-                const params = [];
+                const args = [];
                 if (semana) {
                     query += " AND semana_referente = ?";
-                    params.push(semana);
+                    args.push(semana);
                 }
                 if (nome) {
                     query += " AND nome LIKE ?";
-                    params.push(`%${nome}%`);
+                    args.push(`%${nome}%`);
                 }
                 if (descricao) {
                     query += " AND descricao LIKE ?";
-                    params.push(`%${descricao}%`);
+                    args.push(`%${descricao}%`);
                 }
-                if (!categoria || categoria === 'semanal') {
-                    db.all(query, params, (err, rows) => {
-                        resolve(rows || []);
-                    });
-                } else {
-                    resolve([]);
-                }
-            }),
-            diarias: new Promise((resolve) => {
+                const result = await db.execute({ sql: query, args });
+                return result.rows || [];
+            })(),
+            diarias: (async () => {
+                if (categoria && categoria !== 'diaria') return [];
                 let query = "SELECT * FROM contas_diarias WHERE data BETWEEN ? AND ?";
-                const params = [periodoInicio, periodoFim];
+                const args = [periodoInicio, periodoFim];
                 if (nome) {
                     query += " AND nome LIKE ?";
-                    params.push(`%${nome}%`);
+                    args.push(`%${nome}%`);
                 }
                 if (descricao) {
                     query += " AND descricao LIKE ?";
-                    params.push(`%${descricao}%`);
+                    args.push(`%${descricao}%`);
                 }
-                if (!categoria || categoria === 'diaria') {
-                    db.all(query, params, (err, rows) => {
-                        resolve(rows || []);
-                    });
-                } else {
-                    resolve([]);
-                }
-            })
+                const result = await db.execute({ sql: query, args });
+                return result.rows || [];
+            })()
         };
 
         const [arrecadacao, fixas, semanais, diarias] = await Promise.all([
@@ -699,7 +810,7 @@ app.get('/api/relatorios', authenticateToken, async (req, res) => {
                 categoria: 'Receita',
                 id: item.id,
                 nome: 'Arrecadação',
-                valor: parseFloat(item.valor),
+                valor: parseFloat(item.valor || 0),
                 periodo: item.data,
                 descricao: item.observacoes || 'Arrecadação diária',
                 created_at: item.created_at,
@@ -714,7 +825,7 @@ app.get('/api/relatorios', authenticateToken, async (req, res) => {
                 categoria: 'Fixa',
                 id: item.id,
                 nome: item.nome,
-                valor: parseFloat(item.valor),
+                valor: parseFloat(item.valor || 0),
                 periodo: item.mes_referencia,
                 descricao: null,
                 created_at: item.created_at,
@@ -729,7 +840,7 @@ app.get('/api/relatorios', authenticateToken, async (req, res) => {
                 categoria: 'Semanal',
                 id: item.id,
                 nome: item.nome,
-                valor: parseFloat(item.valor),
+                valor: parseFloat(item.valor || 0),
                 periodo: item.semana_referente,
                 descricao: item.descricao,
                 created_at: item.created_at,
@@ -744,7 +855,7 @@ app.get('/api/relatorios', authenticateToken, async (req, res) => {
                 categoria: 'Diária',
                 id: item.id,
                 nome: item.nome,
-                valor: parseFloat(item.valor),
+                valor: parseFloat(item.valor || 0),
                 periodo: item.data,
                 descricao: item.descricao,
                 created_at: item.created_at,
@@ -864,160 +975,193 @@ app.get('/api/relatorios', authenticateToken, async (req, res) => {
 });
 
 // ========== ROTAS DE DASHBOARD ==========
-app.get('/api/dashboard', authenticateToken, (req, res) => {
-    const { mes } = req.query;
-    const mesAtual = mes || new Date().toISOString().slice(0, 7);
+app.get('/api/dashboard', authenticateToken, async (req, res) => {
+    try {
+        const { mes } = req.query;
+        const mesAtual = mes || new Date().toISOString().slice(0, 7);
 
-    const dashboard = {};
+        const dashboard = {};
 
-    // Total arrecadado no mês
-    db.get("SELECT COALESCE(SUM(valor), 0) as total FROM arrecadacao WHERE strftime('%Y-%m', data) = ?", [mesAtual], (err, row) => {
-        dashboard.totalArrecadado = row.total;
+        // Total arrecadado no mês
+        const arrecResult = await db.execute({
+            sql: "SELECT COALESCE(SUM(valor), 0) as total FROM arrecadacao WHERE strftime('%Y-%m', data) = ?",
+            args: [mesAtual]
+        });
+        dashboard.totalArrecadado = arrecResult.rows[0]?.total || 0;
 
         // Total gasto no mês (contas fixas + semanais + diárias)
-        db.get(`SELECT COALESCE(SUM(valor), 0) as total FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1`, [mesAtual], (err, row) => {
-            const totalFixas = row.total;
-
-            // Para contas semanais, buscar todas e filtrar por mês no código
-            // Formato semana_referente: YYYY-WW (ex: 2024-W15)
-            db.all(`SELECT * FROM contas_semanais`, [], (err, semanaisRows) => {
-                const [anoAtual, mesAtualNum] = mesAtual.split('-');
-                const totalSemanais = (semanaisRows || []).filter(s => {
-                    // Filtrar por ano primeiro
-                    if (s.semana_referente && s.semana_referente.startsWith(anoAtual)) {
-                        // Para simplificar, incluir todas as semanas do ano
-                        // Em produção, poderia calcular o mês exato da semana
-                        return true;
-                    }
-                    return false;
-                }).reduce((sum, s) => sum + parseFloat(s.valor || 0), 0);
-
-                db.get(`SELECT COALESCE(SUM(valor), 0) as total FROM contas_diarias WHERE strftime('%Y-%m', data) = ?`, [mesAtual], (err, row) => {
-                    const totalDiarias = row.total;
-                    dashboard.totalGasto = totalFixas + totalSemanais + totalDiarias;
-                    dashboard.lucroLiquido = dashboard.totalArrecadado - dashboard.totalGasto;
-
-                    // Ranking de maiores gastos
-                    db.all(`SELECT nome, valor, 'fixa' as tipo FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1
-                            UNION ALL
-                            SELECT nome, valor, 'diaria' as tipo FROM contas_diarias WHERE strftime('%Y-%m', data) = ?
-                            ORDER BY valor DESC LIMIT 10`, [mesAtual, mesAtual], (err, rows) => {
-                        // Adicionar contas semanais do mês ao ranking
-                        const [anoRank, mesRank] = mesAtual.split('-');
-                        const semanaisDoMes = (semanaisRows || []).filter(s => {
-                            return s.semana_referente && s.semana_referente.startsWith(anoRank);
-                        }).map(s => ({ nome: s.nome, valor: parseFloat(s.valor), tipo: 'semanal' }));
-                        
-                        const allRows = [...(rows || []), ...semanaisDoMes].sort((a, b) => b.valor - a.valor).slice(0, 10);
-                        dashboard.rankingGastos = allRows;
-
-                        // Dados para gráficos (últimos 6 meses)
-                        db.all(`SELECT strftime('%Y-%m', data) as mes, SUM(valor) as total 
-                                FROM arrecadacao 
-                                WHERE data >= date('now', '-6 months')
-                                GROUP BY mes ORDER BY mes`, [], (err, rows) => {
-                            dashboard.graficoArrecadacao = rows || [];
-
-                            // Gráfico de gastos - simplificado sem contas semanais na query
-                            db.all(`SELECT 
-                                    strftime('%Y-%m', data) as mes,
-                                    (SELECT COALESCE(SUM(valor), 0) FROM contas_fixas WHERE mes_referencia = strftime('%Y-%m', data) AND ativo = 1) +
-                                    (SELECT COALESCE(SUM(valor), 0) FROM contas_diarias WHERE strftime('%Y-%m', data) = strftime('%Y-%m', data)) as total
-                                    FROM arrecadacao 
-                                    WHERE data >= date('now', '-6 months')
-                                    GROUP BY mes ORDER BY mes`, [], (err, rows) => {
-                                dashboard.graficoGastos = rows || [];
-
-                                // Contas fixas vencendo (próximo mês)
-                                const proximoMes = new Date();
-                                proximoMes.setMonth(proximoMes.getMonth() + 1);
-                                const proximoMesStr = proximoMes.toISOString().slice(0, 7);
-
-                                db.all(`SELECT * FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1`, [proximoMesStr], (err, rows) => {
-                                    dashboard.contasVencendo = rows || [];
-
-                                    res.json(dashboard);
-                                });
-                            });
-                        });
-                    });
-                });
-            });
+        const fixasResult = await db.execute({
+            sql: "SELECT COALESCE(SUM(valor), 0) as total FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1",
+            args: [mesAtual]
         });
-    });
+        const totalFixas = fixasResult.rows[0]?.total || 0;
+
+        // Para contas semanais, buscar todas e filtrar por mês no código
+        const semanaisResult = await db.execute({
+            sql: "SELECT * FROM contas_semanais",
+            args: []
+        });
+        const semanaisRows = semanaisResult.rows || [];
+        const [anoAtual] = mesAtual.split('-');
+        const totalSemanais = semanaisRows.filter(s => {
+            return s.semana_referente && s.semana_referente.startsWith(anoAtual);
+        }).reduce((sum, s) => sum + parseFloat(s.valor || 0), 0);
+
+        const diariasResult = await db.execute({
+            sql: "SELECT COALESCE(SUM(valor), 0) as total FROM contas_diarias WHERE strftime('%Y-%m', data) = ?",
+            args: [mesAtual]
+        });
+        const totalDiarias = diariasResult.rows[0]?.total || 0;
+
+        dashboard.totalGasto = totalFixas + totalSemanais + totalDiarias;
+        dashboard.lucroLiquido = dashboard.totalArrecadado - dashboard.totalGasto;
+
+        // Ranking de maiores gastos
+        const rankingResult = await db.execute({
+            sql: `SELECT nome, valor, 'fixa' as tipo FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1
+                  UNION ALL
+                  SELECT nome, valor, 'diaria' as tipo FROM contas_diarias WHERE strftime('%Y-%m', data) = ?
+                  ORDER BY valor DESC LIMIT 10`,
+            args: [mesAtual, mesAtual]
+        });
+        const rows = rankingResult.rows || [];
+        const semanaisDoMes = semanaisRows.filter(s => {
+            return s.semana_referente && s.semana_referente.startsWith(anoAtual);
+        }).map(s => ({ nome: s.nome, valor: parseFloat(s.valor || 0), tipo: 'semanal' }));
+        
+        const allRows = [...rows, ...semanaisDoMes].sort((a, b) => (b.valor || 0) - (a.valor || 0)).slice(0, 10);
+        dashboard.rankingGastos = allRows;
+
+        // Dados para gráficos (últimos 6 meses)
+        const graficoArrecResult = await db.execute({
+            sql: `SELECT strftime('%Y-%m', data) as mes, SUM(valor) as total 
+                  FROM arrecadacao 
+                  WHERE data >= date('now', '-6 months')
+                  GROUP BY mes ORDER BY mes`,
+            args: []
+        });
+        dashboard.graficoArrecadacao = graficoArrecResult.rows || [];
+
+        // Gráfico de gastos
+        const graficoGastosResult = await db.execute({
+            sql: `SELECT 
+                  strftime('%Y-%m', data) as mes,
+                  (SELECT COALESCE(SUM(valor), 0) FROM contas_fixas WHERE mes_referencia = strftime('%Y-%m', data) AND ativo = 1) +
+                  (SELECT COALESCE(SUM(valor), 0) FROM contas_diarias WHERE strftime('%Y-%m', data) = strftime('%Y-%m', data)) as total
+                  FROM arrecadacao 
+                  WHERE data >= date('now', '-6 months')
+                  GROUP BY mes ORDER BY mes`,
+            args: []
+        });
+        dashboard.graficoGastos = graficoGastosResult.rows || [];
+
+        // Contas fixas vencendo (próximo mês)
+        const proximoMes = new Date();
+        proximoMes.setMonth(proximoMes.getMonth() + 1);
+        const proximoMesStr = proximoMes.toISOString().slice(0, 7);
+
+        const contasVencendoResult = await db.execute({
+            sql: "SELECT * FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1",
+            args: [proximoMesStr]
+        });
+        dashboard.contasVencendo = contasVencendoResult.rows || [];
+
+        res.json(dashboard);
+    } catch (err) {
+        console.error('Erro ao buscar dashboard:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ========== ROTAS DE BACKUP ==========
+// Nota: Com Turso (banco na nuvem), backup não é necessário pois os dados já estão na nuvem
+// Esta rota está mantida para compatibilidade, mas retorna uma mensagem informativa
 app.get('/api/backup', authenticateToken, (req, res) => {
-    const backupFile = `backup_${Date.now()}.db`;
-    const source = './restaurante.db';
-    const dest = `./backups/${backupFile}`;
-
-    if (!fs.existsSync('./backups')) {
-        fs.mkdirSync('./backups');
-    }
-
-    fs.copyFile(source, dest, (err) => {
-        if (err) {
-            return res.status(500).json({ error: 'Erro ao criar backup' });
-        }
-        res.json({ message: 'Backup criado com sucesso', arquivo: backupFile });
+    res.json({ 
+        message: 'Backup não necessário: dados já estão seguros no Turso (banco na nuvem)',
+        info: 'O Turso mantém backups automáticos dos seus dados'
     });
 });
 
 // ========== ROTAS DE LOGS ==========
-app.get('/api/logs', authenticateToken, (req, res) => {
-    const { limit = 100 } = req.query;
-    db.all("SELECT * FROM logs ORDER BY created_at DESC LIMIT ?", [limit], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
+app.get('/api/logs', authenticateToken, async (req, res) => {
+    try {
+        const { limit = 100 } = req.query;
+        const result = await db.execute({
+            sql: "SELECT * FROM logs ORDER BY created_at DESC LIMIT ?",
+            args: [limit]
+        });
+        const rows = result.rows.map(row => ({
+            id: row.id,
+            usuario: row.usuario,
+            acao: row.acao,
+            tabela: row.tabela,
+            registro_id: row.registro_id,
+            dados_anteriores: row.dados_anteriores,
+            dados_novos: row.dados_novos,
+            created_at: row.created_at
+        }));
         res.json(rows);
-    });
+    } catch (err) {
+        console.error('Erro ao buscar logs:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ========== ROTA DE COMPARAÇÃO DE MESES ==========
-app.get('/api/comparar-meses', authenticateToken, (req, res) => {
-    const { mes1, mes2 } = req.query;
-    
-    if (!mes1 || !mes2) {
-        return res.status(400).json({ error: 'Dois meses devem ser fornecidos' });
-    }
-
-    const comparacao = { mes1: {}, mes2: {} };
-
-    // Função auxiliar para calcular totais de um mês
-    function calcularMes(mes, callback) {
-        const resultado = {};
+app.get('/api/comparar-meses', authenticateToken, async (req, res) => {
+    try {
+        const { mes1, mes2 } = req.query;
         
-        db.get("SELECT COALESCE(SUM(valor), 0) as total FROM arrecadacao WHERE strftime('%Y-%m', data) = ?", [mes], (err, row) => {
-            resultado.arrecadacao = row.total;
+        if (!mes1 || !mes2) {
+            return res.status(400).json({ error: 'Dois meses devem ser fornecidos' });
+        }
 
-            db.get("SELECT COALESCE(SUM(valor), 0) as total FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1", [mes], (err, row) => {
-                resultado.contasFixas = row.total;
-
-                db.get("SELECT COALESCE(SUM(valor), 0) as total FROM contas_diarias WHERE strftime('%Y-%m', data) = ?", [mes], (err, row) => {
-                    resultado.contasDiarias = row.total;
-                    resultado.totalGastos = resultado.contasFixas + resultado.contasDiarias;
-                    resultado.lucro = resultado.arrecadacao - resultado.totalGastos;
-                    callback(resultado);
-                });
+        // Função auxiliar para calcular totais de um mês
+        async function calcularMes(mes) {
+            const resultado = {};
+            
+            const arrecResult = await db.execute({
+                sql: "SELECT COALESCE(SUM(valor), 0) as total FROM arrecadacao WHERE strftime('%Y-%m', data) = ?",
+                args: [mes]
             });
-        });
-    }
+            resultado.arrecadacao = arrecResult.rows[0]?.total || 0;
 
-    calcularMes(mes1, (res1) => {
-        comparacao.mes1 = res1;
-        calcularMes(mes2, (res2) => {
-            comparacao.mes2 = res2;
-            comparacao.diferenca = {
+            const fixasResult = await db.execute({
+                sql: "SELECT COALESCE(SUM(valor), 0) as total FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1",
+                args: [mes]
+            });
+            resultado.contasFixas = fixasResult.rows[0]?.total || 0;
+
+            const diariasResult = await db.execute({
+                sql: "SELECT COALESCE(SUM(valor), 0) as total FROM contas_diarias WHERE strftime('%Y-%m', data) = ?",
+                args: [mes]
+            });
+            resultado.contasDiarias = diariasResult.rows[0]?.total || 0;
+            resultado.totalGastos = resultado.contasFixas + resultado.contasDiarias;
+            resultado.lucro = resultado.arrecadacao - resultado.totalGastos;
+            
+            return resultado;
+        }
+
+        const res1 = await calcularMes(mes1);
+        const res2 = await calcularMes(mes2);
+
+        const comparacao = {
+            mes1: res1,
+            mes2: res2,
+            diferenca: {
                 arrecadacao: res2.arrecadacao - res1.arrecadacao,
                 gastos: res2.totalGastos - res1.totalGastos,
                 lucro: res2.lucro - res1.lucro
-            };
-            res.json(comparacao);
-        });
-    });
+            }
+        };
+
+        res.json(comparacao);
+    } catch (err) {
+        console.error('Erro ao comparar meses:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Rota raiz
@@ -1044,14 +1188,9 @@ server.on('error', (err) => {
     process.exit(1);
 });
 
-// Fechar banco ao encerrar
+// Fechar banco ao encerrar (Turso não precisa de close, mas mantemos para compatibilidade)
 process.on('SIGINT', () => {
-    db.close((err) => {
-        if (err) {
-            console.error(err.message);
-        }
-        console.log('Conexão com banco de dados fechada.');
-        process.exit(0);
-    });
+    console.log('Encerrando aplicação...');
+    process.exit(0);
 });
 
