@@ -1,28 +1,30 @@
 :root {
-    --primary-color: #4f46e5;
-    --secondary-color: #7c3aed;
-    --success-color: #10b981;
+    /* Cores Bosque da Carne: verde escuro + marrom */
+    --primary-color: #14532d;       /* verde escuro principal */
+    --secondary-color: #78350f;     /* marrom */
+    --success-color: #16a34a;
     --danger-color: #ef4444;
     --warning-color: #f59e0b;
-    --bg-color: #f8fafc;
-    --card-bg: #ffffff;
-    --text-color: #1e293b;
-    --text-secondary: #64748b;
-    --border-color: #e2e8f0;
-    --sidebar-bg: #1e293b;
-    --sidebar-text: #f1f5f9;
-    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --bg-color: #0b1120;
+    --card-bg: #111827;
+    --text-color: #e5e7eb;
+    --text-secondary: #9ca3af;
+    --border-color: #1f2937;
+    --sidebar-bg: #020617;
+    --sidebar-text: #f9fafb;
+    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
 }
 
 [data-theme="dark"] {
-    --bg-color: #0f172a;
-    --card-bg: #1e293b;
-    --text-color: #f1f5f9;
-    --text-secondary: #cbd5e1;
-    --border-color: #334155;
-    --sidebar-bg: #0f172a;
-    --sidebar-text: #f1f5f9;
+    /* Mantém a mesma base escura, só reforça contraste */
+    --bg-color: #020617;
+    --card-bg: #111827;
+    --text-color: #f9fafb;
+    --text-secondary: #9ca3af;
+    --border-color: #1f2937;
+    --sidebar-bg: #020617;
+    --sidebar-text: #f9fafb;
 }
 
 * {
@@ -54,6 +56,13 @@ body {
     box-shadow: var(--shadow-lg);
     width: 100%;
     max-width: 400px;
+}
+
+.login-logo {
+    display: block;
+    margin: 0 auto 1.5rem;
+    max-width: 220px;
+    height: auto;
 }
 
 .login-box h1 {
@@ -131,6 +140,30 @@ body {
 
 .sidebar-header h2 {
     font-size: 1.25rem;
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.sidebar-brand img {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    object-fit: cover;
+    box-shadow: 0 0 0 2px rgba(249, 250, 251, 0.1);
+}
+
+.sidebar-brand strong {
+    font-size: 0.95rem;
+    color: var(--sidebar-text);
+}
+
+.sidebar-brand span {
+    font-size: 0.8rem;
+    color: rgba(249, 250, 251, 0.6);
 }
 
 .theme-toggle {

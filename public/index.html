@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão Financeira - Restaurante</title>
+    <title>Gestão Financeira - Bosque da Carne</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -13,8 +13,8 @@
     <!-- Tela de Login -->
     <div id="loginScreen" class="login-container">
         <div class="login-box">
-            <h1>Gestão Financeira</h1>
-            <h2>Restaurante</h2>
+            <img src="logo-bosque-da-carne.png" alt="Bosque da Carne" class="login-logo">
+            <h2>Gestão Financeira</h2>
             <form id="loginForm">
                 <input type="text" id="username" placeholder="Usuário" required>
                 <input type="password" id="password" placeholder="Senha" required>
@@ -108,7 +108,13 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>💰 Gestão Financeira</h2>
+                <div class="sidebar-brand">
+                    <img src="logo-bosque-da-carne.png" alt="Bosque da Carne">
+                    <div>
+                        <strong>Bosque da Carne</strong><br>
+                        <span>Gestão Financeira</span>
+                    </div>
+                </div>
                 <button id="toggleTheme" class="theme-toggle">🌙</button>
             </div>
             <nav class="sidebar-nav">
