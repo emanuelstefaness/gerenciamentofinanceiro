@@ -784,9 +784,8 @@ table tbody tr:last-child td {
     cursor: pointer;
 }
 
-/* Responsive */
-/* Tela de lançamento de gastos: mobile e resolução 1792 x 828 px */
-@media (max-width: 768px), (max-width: 1792px) and (max-height: 828px) {
+/* Responsive - celular (ex.: iPhone 11): tela de lançamento de gastos como principal */
+@media (max-width: 768px) {
     .sidebar {
         display: none;
     }
@@ -830,38 +829,8 @@ table tbody tr:last-child td {
     }
 }
 
-/* Otimizado para 1792 x 828: layout do formulário de lançamento de gastos */
-@media (min-width: 768px) and (max-width: 1792px) and (max-height: 828px) {
-    .mobile-quick-add {
-        max-width: 1792px;
-        margin: 0 auto;
-    }
-
-    .mobile-form-container {
-        max-width: 520px;
-        padding: 1.5rem 2rem;
-    }
-
-    .mobile-header h1 {
-        font-size: 1.4rem;
-    }
-
-    .mobile-quick-form {
-        padding: 1.75rem;
-    }
-
-    .form-group-mobile input,
-    .form-group-mobile textarea {
-        padding: 0.9rem 1rem;
-        font-size: 1.05rem;
-    }
-
-    .mobile-recent {
-        padding: 1.25rem;
-    }
-}
-
-@media (min-width: 769px) and (min-height: 829px) {
+/* Computador: dashboard como principal, esconde tela mobile de gastos */
+@media (min-width: 769px) {
     .mobile-quick-add {
         display: none !important;
     }

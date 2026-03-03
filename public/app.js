@@ -2,11 +2,9 @@
 const API_BASE = (window.location.origin || 'http://localhost:3000') + '/api';
 let charts = {};
 
-// Detectar se é mobile ou resolução 1792x828 (tela de lançamento de gastos)
+// Detectar se é celular (ex.: iPhone 11) - tela de lançamento de gastos só como principal nesses casos
 function isMobile() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    return w <= 768 || (w <= 1792 && h <= 828) || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
 // Inicialização ao carregar
@@ -20,9 +18,11 @@ window.addEventListener('DOMContentLoaded', () => {
     
     setupEventListeners();
     
-    // Se for mobile ou 1792x828, mostrar interface simplificada de lançamento de gastos
+    // No celular: lançamento de gastos como principal; no computador: dashboard
     if (isMobile()) {
         showMobileQuickAdd();
+    } else {
+        showPage('dashboard');
     }
 });
 
@@ -107,7 +107,7 @@ function setupEventListeners() {
 function showMainApp() {
     document.getElementById('mainApp').style.display = 'flex';
     
-    // Se for mobile ou 1792x828, mostrar interface simplificada de lançamento de gastos
+    // No celular: lançamento de gastos como principal; no computador: dashboard
     if (isMobile()) {
         showMobileQuickAdd();
     } else {
