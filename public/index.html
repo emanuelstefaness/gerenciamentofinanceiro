@@ -10,22 +10,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
-    <!-- Tela de Login -->
-    <div id="loginScreen" class="login-container">
-        <div class="login-box">
-            <img src="logo-bosque-da-carne.png" alt="Bosque da Carne" class="login-logo">
-            <h2>Gestão Financeira</h2>
-            <form id="loginForm">
-                <input type="text" id="username" placeholder="Usuário" required>
-                <input type="password" id="password" placeholder="Senha" required>
-                <button type="submit">Entrar</button>
-                <p id="loginError" class="error-message"></p>
-            </form>
-        </div>
-    </div>
-
     <!-- Interface Principal -->
-    <div id="mainApp" class="main-app" style="display: none;">
+    <div id="mainApp" class="main-app">
         <!-- Tela Mobile Simplificada para Gastos Diários -->
         <div id="mobileQuickAdd" class="mobile-quick-add" style="display: none;">
             <div class="mobile-header">
@@ -101,7 +87,6 @@
                 <a href="#" data-page="configuracoes" class="mobile-menu-item">
                     <span>⚙️</span> Configurações
                 </a>
-                <button id="mobileLogoutBtn" class="mobile-logout-btn">Sair</button>
             </nav>
         </div>
 
@@ -143,9 +128,7 @@
                     <span>⚙️</span> Configurações
                 </a>
             </nav>
-            <div class="sidebar-footer">
-                <p id="currentUser">Usuário: <span></span></p>
-                <button id="logoutBtn" class="logout-btn">Sair</button>
+            <div class="sidebar-footer" style="display: none;">
             </div>
         </aside>
 

@@ -40,78 +40,6 @@ body {
     transition: background-color 0.3s, color 0.3s;
 }
 
-/* Login Screen */
-.login-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.login-box {
-    background: var(--card-bg);
-    padding: 2rem;
-    border-radius: 12px;
-    box-shadow: var(--shadow-lg);
-    width: 100%;
-    max-width: 400px;
-}
-
-.login-logo {
-    display: block;
-    margin: 0 auto 1.5rem;
-    max-width: 220px;
-    height: auto;
-}
-
-.login-box h1 {
-    text-align: center;
-    color: var(--primary-color);
-    margin-bottom: 0.5rem;
-}
-
-.login-box h2 {
-    text-align: center;
-    color: var(--text-secondary);
-    margin-bottom: 2rem;
-    font-weight: normal;
-}
-
-.login-box input {
-    width: 100%;
-    padding: 0.75rem;
-    margin-bottom: 1rem;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    font-size: 1rem;
-    background: var(--bg-color);
-    color: var(--text-color);
-}
-
-.login-box button {
-    width: 100%;
-    padding: 0.75rem;
-    background: var(--primary-color);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-
-.login-box button:hover {
-    background: var(--secondary-color);
-}
-
-.error-message {
-    color: var(--danger-color);
-    text-align: center;
-    margin-top: 1rem;
-    display: none;
-}
-
 /* Main App */
 .main-app {
     display: flex;
@@ -857,7 +785,8 @@ table tbody tr:last-child td {
 }
 
 /* Responsive */
-@media (max-width: 768px) {
+/* Tela de lançamento de gastos: mobile e resolução 1792 x 828 px */
+@media (max-width: 768px), (max-width: 1792px) and (max-height: 828px) {
     .sidebar {
         display: none;
     }
@@ -901,7 +830,38 @@ table tbody tr:last-child td {
     }
 }
 
-@media (min-width: 769px) {
+/* Otimizado para 1792 x 828: layout do formulário de lançamento de gastos */
+@media (min-width: 768px) and (max-width: 1792px) and (max-height: 828px) {
+    .mobile-quick-add {
+        max-width: 1792px;
+        margin: 0 auto;
+    }
+
+    .mobile-form-container {
+        max-width: 520px;
+        padding: 1.5rem 2rem;
+    }
+
+    .mobile-header h1 {
+        font-size: 1.4rem;
+    }
+
+    .mobile-quick-form {
+        padding: 1.75rem;
+    }
+
+    .form-group-mobile input,
+    .form-group-mobile textarea {
+        padding: 0.9rem 1rem;
+        font-size: 1.05rem;
+    }
+
+    .mobile-recent {
+        padding: 1.25rem;
+    }
+}
+
+@media (min-width: 769px) and (min-height: 829px) {
     .mobile-quick-add {
         display: none !important;
     }

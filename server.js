@@ -1,7 +1,5 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
@@ -10,7 +8,6 @@ const fs = require('fs');
 const app = express();
 // Back4app define PORT automaticamente, usar 8080 como fallback
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'restaurante_financeiro_secret_key_2024';
 
 // Middleware
 app.use(cors());
@@ -143,44 +140,9 @@ function initializeDatabase() {
             }
         });
 
-        // Criar usuário admin padrão (DEPOIS que a tabela users foi criada)
-        db.get("SELECT * FROM users WHERE username = ?", ['admin'], (err, row) => {
-            if (err) {
-                console.error('❌ Erro ao verificar usuário admin:', err.message);
-            } else if (!row) {
-                const hashedPassword = bcrypt.hashSync('admin123', 10);
-                db.run("INSERT INTO users (username, password) VALUES (?, ?)", ['admin', hashedPassword], (err) => {
-                    if (err) {
-                        console.error('❌ Erro ao criar usuário admin:', err.message);
-                    } else {
-                        console.log('✅ Usuário admin criado (username: admin, password: admin123)');
-                    }
-                });
-            } else {
-                console.log('✅ Usuário admin já existe');
-            }
-        });
     });
     
     console.log('✅ Inicialização do banco de dados concluída');
-}
-
-// Middleware de autenticação
-function authenticateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json({ error: 'Token não fornecido' });
-    }
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.status(403).json({ error: 'Token inválido' });
-        }
-        req.user = user;
-        next();
-    });
 }
 
 // Função para criar log
@@ -225,45 +187,8 @@ function similaridade(str1, str2) {
     return matches / maxLen;
 }
 
-// ========== ROTAS DE AUTENTICAÇÃO ==========
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-
-    db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
-        if (err) {
-            return res.status(500).json({ error: 'Erro no servidor' });
-        }
-        if (!user || !bcrypt.compareSync(password, user.password)) {
-            return res.status(401).json({ error: 'Credenciais inválidas' });
-        }
-
-        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
-        res.json({ token, username: user.username });
-    });
-});
-
-app.post('/api/register', (req, res) => {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Username e senha são obrigatórios' });
-    }
-
-    const hashedPassword = bcrypt.hashSync(password, 10);
-
-    db.run("INSERT INTO users (username, password) VALUES (?, ?)", [username, hashedPassword], function(err) {
-        if (err) {
-            if (err.message.includes('UNIQUE')) {
-                return res.status(400).json({ error: 'Username já existe' });
-            }
-            return res.status(500).json({ error: 'Erro ao criar usuário' });
-        }
-        res.json({ message: 'Usuário criado com sucesso', id: this.lastID });
-    });
-});
-
 // ========== ROTAS DE ARRECADAÇÃO ==========
-app.get('/api/arrecadacao', authenticateToken, (req, res) => {
+app.get('/api/arrecadacao', (req, res) => {
     const { data_inicio, data_fim, mes, semana } = req.query;
     let query = "SELECT * FROM arrecadacao WHERE 1=1";
     const params = [];
@@ -289,7 +214,7 @@ app.get('/api/arrecadacao', authenticateToken, (req, res) => {
     });
 });
 
-app.post('/api/arrecadacao', authenticateToken, (req, res) => {
+app.post('/api/arrecadacao', (req, res) => {
     const { data, valor, observacoes } = req.body;
 
     db.run("INSERT INTO arrecadacao (data, valor, observacoes) VALUES (?, ?, ?)",
@@ -297,12 +222,12 @@ app.post('/api/arrecadacao', authenticateToken, (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            createLog(req.user.username, 'CREATE', 'arrecadacao', this.lastID, null, req.body);
+            createLog('sistema', 'CREATE', 'arrecadacao', this.lastID, null, req.body);
             res.json({ id: this.lastID, message: 'Arrecadação registrada com sucesso' });
         });
 });
 
-app.put('/api/arrecadacao/:id', authenticateToken, (req, res) => {
+app.put('/api/arrecadacao/:id', (req, res) => {
     const { id } = req.params;
     const { data, valor, observacoes } = req.body;
 
@@ -316,13 +241,13 @@ app.put('/api/arrecadacao/:id', authenticateToken, (req, res) => {
                 if (err) {
                     return res.status(500).json({ error: err.message });
                 }
-                createLog(req.user.username, 'UPDATE', 'arrecadacao', id, oldRow, req.body);
+                createLog('sistema', 'UPDATE', 'arrecadacao', id, oldRow, req.body);
                 res.json({ message: 'Arrecadação atualizada com sucesso' });
             });
     });
 });
 
-app.delete('/api/arrecadacao/:id', authenticateToken, (req, res) => {
+app.delete('/api/arrecadacao/:id', (req, res) => {
     const { id } = req.params;
 
     db.get("SELECT * FROM arrecadacao WHERE id = ?", [id], (err, row) => {
@@ -334,14 +259,14 @@ app.delete('/api/arrecadacao/:id', authenticateToken, (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            createLog(req.user.username, 'DELETE', 'arrecadacao', id, row, null);
+            createLog('sistema', 'DELETE', 'arrecadacao', id, row, null);
             res.json({ message: 'Arrecadação excluída com sucesso' });
         });
     });
 });
 
 // ========== ROTAS DE CONTAS FIXAS ==========
-app.get('/api/contas-fixas', authenticateToken, (req, res) => {
+app.get('/api/contas-fixas', (req, res) => {
     const { mes } = req.query;
     let query = "SELECT * FROM contas_fixas WHERE 1=1";
     const params = [];
@@ -361,7 +286,7 @@ app.get('/api/contas-fixas', authenticateToken, (req, res) => {
     });
 });
 
-app.post('/api/contas-fixas', authenticateToken, (req, res) => {
+app.post('/api/contas-fixas', (req, res) => {
     const { nome, valor, mes_referencia, recorrencia_mensal } = req.body;
 
     db.run("INSERT INTO contas_fixas (nome, valor, mes_referencia, recorrencia_mensal) VALUES (?, ?, ?, ?)",
@@ -369,12 +294,12 @@ app.post('/api/contas-fixas', authenticateToken, (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            createLog(req.user.username, 'CREATE', 'contas_fixas', this.lastID, null, req.body);
+            createLog('sistema', 'CREATE', 'contas_fixas', this.lastID, null, req.body);
             res.json({ id: this.lastID, message: 'Conta fixa criada com sucesso' });
         });
 });
 
-app.put('/api/contas-fixas/:id', authenticateToken, (req, res) => {
+app.put('/api/contas-fixas/:id', (req, res) => {
     const { id } = req.params;
     const { nome, valor, mes_referencia, recorrencia_mensal, ativo } = req.body;
 
@@ -388,13 +313,13 @@ app.put('/api/contas-fixas/:id', authenticateToken, (req, res) => {
                 if (err) {
                     return res.status(500).json({ error: err.message });
                 }
-                createLog(req.user.username, 'UPDATE', 'contas_fixas', id, oldRow, req.body);
+                createLog('sistema', 'UPDATE', 'contas_fixas', id, oldRow, req.body);
                 res.json({ message: 'Conta fixa atualizada com sucesso' });
             });
     });
 });
 
-app.delete('/api/contas-fixas/:id', authenticateToken, (req, res) => {
+app.delete('/api/contas-fixas/:id', (req, res) => {
     const { id } = req.params;
 
     db.get("SELECT * FROM contas_fixas WHERE id = ?", [id], (err, row) => {
@@ -406,14 +331,14 @@ app.delete('/api/contas-fixas/:id', authenticateToken, (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            createLog(req.user.username, 'DELETE', 'contas_fixas', id, row, null);
+            createLog('sistema', 'DELETE', 'contas_fixas', id, row, null);
             res.json({ message: 'Conta fixa excluída com sucesso' });
         });
     });
 });
 
 // ========== ROTAS DE CONTAS SEMANAIS ==========
-app.get('/api/contas-semanais', authenticateToken, (req, res) => {
+app.get('/api/contas-semanais', (req, res) => {
     const { semana, nome } = req.query;
     let query = "SELECT * FROM contas_semanais WHERE 1=1";
     const params = [];
@@ -437,7 +362,7 @@ app.get('/api/contas-semanais', authenticateToken, (req, res) => {
     });
 });
 
-app.post('/api/contas-semanais', authenticateToken, (req, res) => {
+app.post('/api/contas-semanais', (req, res) => {
     const { nome, valor, semana_referente, descricao, recorrencia_semanal } = req.body;
 
     db.run("INSERT INTO contas_semanais (nome, valor, semana_referente, descricao, recorrencia_semanal) VALUES (?, ?, ?, ?, ?)",
@@ -445,12 +370,12 @@ app.post('/api/contas-semanais', authenticateToken, (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            createLog(req.user.username, 'CREATE', 'contas_semanais', this.lastID, null, req.body);
+            createLog('sistema', 'CREATE', 'contas_semanais', this.lastID, null, req.body);
             res.json({ id: this.lastID, message: 'Conta semanal criada com sucesso' });
         });
 });
 
-app.put('/api/contas-semanais/:id', authenticateToken, (req, res) => {
+app.put('/api/contas-semanais/:id', (req, res) => {
     const { id } = req.params;
     const { nome, valor, semana_referente, descricao, recorrencia_semanal } = req.body;
 
@@ -464,13 +389,13 @@ app.put('/api/contas-semanais/:id', authenticateToken, (req, res) => {
                 if (err) {
                     return res.status(500).json({ error: err.message });
                 }
-                createLog(req.user.username, 'UPDATE', 'contas_semanais', id, oldRow, req.body);
+                createLog('sistema', 'UPDATE', 'contas_semanais', id, oldRow, req.body);
                 res.json({ message: 'Conta semanal atualizada com sucesso' });
             });
     });
 });
 
-app.delete('/api/contas-semanais/:id', authenticateToken, (req, res) => {
+app.delete('/api/contas-semanais/:id', (req, res) => {
     const { id } = req.params;
 
     db.get("SELECT * FROM contas_semanais WHERE id = ?", [id], (err, row) => {
@@ -482,14 +407,14 @@ app.delete('/api/contas-semanais/:id', authenticateToken, (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            createLog(req.user.username, 'DELETE', 'contas_semanais', id, row, null);
+            createLog('sistema', 'DELETE', 'contas_semanais', id, row, null);
             res.json({ message: 'Conta semanal excluída com sucesso' });
         });
     });
 });
 
 // ========== ROTAS DE CONTAS DIÁRIAS ==========
-app.get('/api/contas-diarias', authenticateToken, (req, res) => {
+app.get('/api/contas-diarias', (req, res) => {
     const { data_inicio, data_fim, mes, semana, dia } = req.query;
     let query = "SELECT * FROM contas_diarias WHERE 1=1";
     const params = [];
@@ -518,7 +443,7 @@ app.get('/api/contas-diarias', authenticateToken, (req, res) => {
     });
 });
 
-app.post('/api/contas-diarias', authenticateToken, (req, res) => {
+app.post('/api/contas-diarias', (req, res) => {
     const { nome, valor, data, descricao } = req.body;
 
     db.run("INSERT INTO contas_diarias (nome, valor, data, descricao) VALUES (?, ?, ?, ?)",
@@ -526,12 +451,12 @@ app.post('/api/contas-diarias', authenticateToken, (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            createLog(req.user.username, 'CREATE', 'contas_diarias', this.lastID, null, req.body);
+            createLog('sistema', 'CREATE', 'contas_diarias', this.lastID, null, req.body);
             res.json({ id: this.lastID, message: 'Conta diária criada com sucesso' });
         });
 });
 
-app.put('/api/contas-diarias/:id', authenticateToken, (req, res) => {
+app.put('/api/contas-diarias/:id', (req, res) => {
     const { id } = req.params;
     const { nome, valor, data, descricao } = req.body;
 
@@ -545,13 +470,13 @@ app.put('/api/contas-diarias/:id', authenticateToken, (req, res) => {
                 if (err) {
                     return res.status(500).json({ error: err.message });
                 }
-                createLog(req.user.username, 'UPDATE', 'contas_diarias', id, oldRow, req.body);
+                createLog('sistema', 'UPDATE', 'contas_diarias', id, oldRow, req.body);
                 res.json({ message: 'Conta diária atualizada com sucesso' });
             });
     });
 });
 
-app.delete('/api/contas-diarias/:id', authenticateToken, (req, res) => {
+app.delete('/api/contas-diarias/:id', (req, res) => {
     const { id } = req.params;
 
     db.get("SELECT * FROM contas_diarias WHERE id = ?", [id], (err, row) => {
@@ -563,14 +488,14 @@ app.delete('/api/contas-diarias/:id', authenticateToken, (req, res) => {
             if (err) {
                 return res.status(500).json({ error: err.message });
             }
-            createLog(req.user.username, 'DELETE', 'contas_diarias', id, row, null);
+            createLog('sistema', 'DELETE', 'contas_diarias', id, row, null);
             res.json({ message: 'Conta diária excluída com sucesso' });
         });
     });
 });
 
 // ========== ROTAS DE RELATÓRIOS COMPLETOS ==========
-app.get('/api/relatorios', authenticateToken, async (req, res) => {
+app.get('/api/relatorios', async (req, res) => {
     const { nome, descricao, categoria, data_inicio, data_fim, mes, semana, agrupar_similares } = req.query;
     
     try {
@@ -864,7 +789,7 @@ app.get('/api/relatorios', authenticateToken, async (req, res) => {
 });
 
 // ========== ROTAS DE DASHBOARD ==========
-app.get('/api/dashboard', authenticateToken, (req, res) => {
+app.get('/api/dashboard', (req, res) => {
     const { mes } = req.query;
     const mesAtual = mes || new Date().toISOString().slice(0, 7);
 
@@ -948,7 +873,7 @@ app.get('/api/dashboard', authenticateToken, (req, res) => {
 });
 
 // ========== ROTAS DE BACKUP ==========
-app.get('/api/backup', authenticateToken, (req, res) => {
+app.get('/api/backup', (req, res) => {
     const backupFile = `backup_${Date.now()}.db`;
     const source = './restaurante.db';
     const dest = `./backups/${backupFile}`;
@@ -966,7 +891,7 @@ app.get('/api/backup', authenticateToken, (req, res) => {
 });
 
 // ========== ROTAS DE LOGS ==========
-app.get('/api/logs', authenticateToken, (req, res) => {
+app.get('/api/logs', (req, res) => {
     const { limit = 100 } = req.query;
     db.all("SELECT * FROM logs ORDER BY created_at DESC LIMIT ?", [limit], (err, rows) => {
         if (err) {
@@ -977,7 +902,7 @@ app.get('/api/logs', authenticateToken, (req, res) => {
 });
 
 // ========== ROTA DE COMPARAÇÃO DE MESES ==========
-app.get('/api/comparar-meses', authenticateToken, (req, res) => {
+app.get('/api/comparar-meses', (req, res) => {
     const { mes1, mes2 } = req.query;
     
     if (!mes1 || !mes2) {

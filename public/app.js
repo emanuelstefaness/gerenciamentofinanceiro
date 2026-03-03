@@ -1,21 +1,17 @@
 // Configuração da API
 const API_BASE = (window.location.origin || 'http://localhost:3000') + '/api';
-let token = localStorage.getItem('token');
-let currentUser = localStorage.getItem('username');
 let charts = {};
 
-// Detectar se é mobile
+// Detectar se é mobile ou resolução 1792x828 (tela de lançamento de gastos)
 function isMobile() {
-    return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    return w <= 768 || (w <= 1792 && h <= 828) || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
-// Verificar autenticação ao carregar
+// Inicialização ao carregar
 window.addEventListener('DOMContentLoaded', () => {
-    if (token) {
-        showMainApp();
-    } else {
-        showLogin();
-    }
+    showMainApp();
     
     // Configurar tema
     const theme = localStorage.getItem('theme') || 'light';
@@ -24,17 +20,17 @@ window.addEventListener('DOMContentLoaded', () => {
     
     setupEventListeners();
     
-    // Se for mobile, mostrar interface simplificada
-    if (isMobile() && token) {
+    // Se for mobile ou 1792x828, mostrar interface simplificada de lançamento de gastos
+    if (isMobile()) {
         showMobileQuickAdd();
     }
 });
 
 // Detectar mudança de tamanho da tela
 window.addEventListener('resize', () => {
-    if (isMobile() && token && document.getElementById('mainApp').style.display !== 'none') {
+    if (isMobile()) {
         showMobileQuickAdd();
-    } else if (!isMobile()) {
+    } else {
         document.getElementById('mobileQuickAdd').style.display = 'none';
         document.getElementById('mobileMenu').style.display = 'none';
     }
@@ -42,12 +38,6 @@ window.addEventListener('resize', () => {
 
 // Event Listeners
 function setupEventListeners() {
-    // Login
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
-    
-    // Logout
-    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
-    
     // Navegação
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
@@ -110,67 +100,14 @@ function setupEventListeners() {
         });
     });
     
-    // Mobile Logout
-    const mobileLogoutBtn = document.getElementById('mobileLogoutBtn');
-    if (mobileLogoutBtn) {
-        mobileLogoutBtn.addEventListener('click', handleLogout);
-    }
-    
     // Dashboard month selector
     document.getElementById('dashboardMonth').addEventListener('change', loadDashboard);
 }
 
-// Autenticação
-async function handleLogin(e) {
-    e.preventDefault();
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-    const errorMsg = document.getElementById('loginError');
-    
-    try {
-        const response = await fetch(`${API_BASE}/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            token = data.token;
-            currentUser = data.username;
-            localStorage.setItem('token', token);
-            localStorage.setItem('username', currentUser);
-            showMainApp();
-        } else {
-            errorMsg.textContent = data.error || 'Erro ao fazer login';
-            errorMsg.style.display = 'block';
-        }
-    } catch (error) {
-        errorMsg.textContent = 'Erro de conexão';
-        errorMsg.style.display = 'block';
-    }
-}
-
-function handleLogout() {
-    token = null;
-    currentUser = null;
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    showLogin();
-}
-
-function showLogin() {
-    document.getElementById('loginScreen').style.display = 'flex';
-    document.getElementById('mainApp').style.display = 'none';
-}
-
 function showMainApp() {
-    document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('mainApp').style.display = 'flex';
-    document.getElementById('currentUser').querySelector('span').textContent = currentUser;
     
-    // Se for mobile, mostrar interface simplificada primeiro
+    // Se for mobile ou 1792x828, mostrar interface simplificada de lançamento de gastos
     if (isMobile()) {
         showMobileQuickAdd();
     } else {
@@ -263,22 +200,15 @@ function updateThemeButton(theme) {
     btn.textContent = theme === 'dark' ? '☀️' : '🌙';
 }
 
-// Função auxiliar para fazer requisições autenticadas
+// Função auxiliar para fazer requisições à API
 async function apiRequest(endpoint, options = {}) {
     const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
             ...options.headers
         }
     });
-    
-    if (response.status === 401) {
-        handleLogout();
-        throw new Error('Não autenticado');
-    }
-    
     return response;
 }
 
