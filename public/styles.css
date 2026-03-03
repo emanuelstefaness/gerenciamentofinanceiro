@@ -452,6 +452,22 @@ table tbody tr:last-child td {
     border-bottom: none;
 }
 
+/* Lançar Gasto (desktop) */
+.desktop-quick-form .form-group-mobile {
+    margin-bottom: 1.25rem;
+}
+
+.desktop-success-msg {
+    margin-top: 1rem;
+    font-weight: 600;
+}
+
+.desktop-recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
 /* ========== INTERFACE MOBILE SIMPLIFICADA ========== */
 .mobile-quick-add {
     display: none;

@@ -55,6 +55,7 @@ function setupEventListeners() {
     document.getElementById('contaFixaForm').addEventListener('submit', handleContaFixaSubmit);
     document.getElementById('contaSemanalForm').addEventListener('submit', handleContaSemanalSubmit);
     document.getElementById('contaDiariaForm').addEventListener('submit', handleContaDiariaSubmit);
+    document.getElementById('desktopQuickForm').addEventListener('submit', handleDesktopQuickSubmit);
     
     // Mobile Quick Form
     const mobileQuickForm = document.getElementById('mobileQuickForm');
@@ -161,6 +162,9 @@ function showPage(pageName) {
     switch(pageName) {
         case 'dashboard':
             loadDashboard();
+            break;
+        case 'lancar-gasto':
+            loadDesktopRecentGastos();
             break;
         case 'arrecadacao':
             loadArrecadacao();
@@ -1480,6 +1484,78 @@ async function loadMobileRecentGastos() {
             recentList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 1rem;">Nenhum gasto lançado hoje</p>';
         } else {
             recentList.innerHTML = hojeData.slice(0, 5).map(item => `
+                <div class="mobile-recent-item">
+                    <div class="mobile-recent-item-info">
+                        <div class="mobile-recent-item-name">${item.nome}</div>
+                        ${item.descricao ? `<div class="mobile-recent-item-desc">${item.descricao}</div>` : ''}
+                    </div>
+                    <div class="mobile-recent-item-value">${formatCurrency(item.valor)}</div>
+                </div>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Erro ao carregar gastos recentes:', error);
+    }
+}
+
+// ========== LANÇAR GASTO (DESKTOP) ==========
+async function handleDesktopQuickSubmit(e) {
+    e.preventDefault();
+    
+    const nome = document.getElementById('desktopNome').value.trim();
+    const valor = parseFloat(document.getElementById('desktopValor').value);
+    const descricao = document.getElementById('desktopDescricao').value.trim();
+    
+    if (!nome || !valor || valor <= 0) {
+        alert('Por favor, preencha o nome e o valor corretamente');
+        document.getElementById('desktopNome').focus();
+        return;
+    }
+    
+    const data = {
+        nome: nome,
+        valor: valor,
+        data: new Date().toISOString().slice(0, 10),
+        descricao: descricao || null
+    };
+    
+    try {
+        const response = await apiRequest('/contas-diarias', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            document.getElementById('desktopSuccessMsg').textContent = '✓ Gasto salvo com sucesso!';
+            document.getElementById('desktopSuccessMsg').style.display = 'block';
+            document.getElementById('desktopSuccessMsg').style.color = 'var(--success-color)';
+            document.getElementById('desktopQuickForm').reset();
+            loadDesktopRecentGastos();
+            setTimeout(() => {
+                document.getElementById('desktopSuccessMsg').style.display = 'none';
+            }, 3000);
+        }
+    } catch (error) {
+        console.error('Erro ao salvar gasto:', error);
+        alert('Erro ao salvar gasto. Verifique sua conexão e tente novamente.');
+    }
+}
+
+async function loadDesktopRecentGastos() {
+    try {
+        const hoje = new Date().toISOString().slice(0, 10);
+        const response = await apiRequest(`/contas-diarias?dia=${hoje}`);
+        const data = await response.json();
+        
+        const hojeData = data.filter(item => item.data === hoje);
+        hojeData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        
+        const recentList = document.getElementById('desktopRecentList');
+        if (!recentList) return;
+        if (hojeData.length === 0) {
+            recentList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 1rem;">Nenhum gasto lançado hoje</p>';
+        } else {
+            recentList.innerHTML = hojeData.slice(0, 10).map(item => `
                 <div class="mobile-recent-item">
                     <div class="mobile-recent-item-info">
                         <div class="mobile-recent-item-name">${item.nome}</div>
