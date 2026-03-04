@@ -15,25 +15,191 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-// Inicializar banco de dados
-// No Back4app, usar caminho no diretório de trabalho
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'restaurante.db');
-console.log('Tentando conectar ao banco de dados em:', dbPath);
-console.log('Diretório atual:', __dirname);
+// ---------- Banco de dados: Supabase (PostgreSQL), Turso ou SQLite local ----------
+const databaseUrl = process.env.DATABASE_URL || '';
+const useSupabase = /^postgres(ql)?:\/\//i.test(databaseUrl);
+const useTurso = !useSupabase && process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN;
+let db;
 
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('❌ ERRO ao conectar ao banco de dados:', err.message);
-        console.error('Caminho tentado:', dbPath);
-        // Não encerrar o processo, apenas logar o erro
-        // O servidor pode iniciar mesmo sem banco (para debug)
-    } else {
-        console.log('✅ Conectado ao banco de dados SQLite em:', dbPath);
-        initializeDatabase();
-    }
-});
+// Converte SQL SQLite para PostgreSQL (placeholders e strftime)
+function sqlToPg(sql) {
+    let s = sql.replace(/strftime\('%Y-%m',\s*([a-z_.]+)\)/gi, "to_char($1::date, 'YYYY-MM')");
+    s = s.replace(/strftime\('%Y-W%W',\s*([a-z_.]+)\)/gi, "(to_char($1::date, 'IYYY') || '-W' || to_char($1::date, 'IW'))");
+    let n = 0;
+    return s.replace(/\?/g, () => '$' + (++n));
+}
 
-// Inicializar tabelas
+if (useSupabase) {
+    const { Pool } = require('pg');
+    const pgPool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
+    console.log('✅ Usando Supabase (PostgreSQL persistente na nuvem)');
+
+    db = {
+        run(sql, a, b) {
+            const params = typeof a === 'function' ? [] : a;
+            const callback = typeof a === 'function' ? a : b;
+            let runSql = sqlToPg(sql);
+            const isInsert = sql.trim().toUpperCase().startsWith('INSERT') && callback;
+            if (isInsert && !runSql.toUpperCase().includes('RETURNING')) runSql = runSql.replace(/;\s*$/, '') + ' RETURNING id';
+            pgPool.query(runSql, params).then((result) => {
+                const lastID = (result.rows[0] && (result.rows[0].id != null)) ? Number(result.rows[0].id) : 0;
+                if (callback) callback.call({ lastID }, null);
+            }).catch((err) => {
+                if (callback) callback(err);
+            });
+        },
+        get(sql, a, b) {
+            const params = typeof a === 'function' ? [] : a;
+            const callback = typeof a === 'function' ? a : b;
+            pgPool.query(sqlToPg(sql), params).then((result) => {
+                if (callback) callback(null, result.rows[0] || undefined);
+            }).catch((err) => {
+                if (callback) callback(err);
+            });
+        },
+        all(sql, a, b) {
+            const params = typeof a === 'function' ? [] : a;
+            const callback = typeof a === 'function' ? a : b;
+            pgPool.query(sqlToPg(sql), params).then((result) => {
+                if (callback) callback(null, result.rows || []);
+            }).catch((err) => {
+                if (callback) callback(err);
+            });
+        },
+        serialize(callback) {
+            callback();
+        },
+        close(callback) {
+            pgPool.end().then(() => { if (callback) callback(); }).catch(() => { if (callback) callback(); });
+        }
+    };
+    initializeDatabasePostgres(pgPool);
+} else if (useTurso) {
+    const { createClient } = require('@libsql/client');
+    const tursoClient = createClient({
+        url: process.env.TURSO_DATABASE_URL,
+        authToken: process.env.TURSO_AUTH_TOKEN
+    });
+    console.log('✅ Usando Turso (banco persistente na nuvem)');
+
+    db = {
+        run(sql, a, b) {
+            const params = typeof a === 'function' ? [] : a;
+            const callback = typeof a === 'function' ? a : b;
+            tursoClient.execute({ sql, args: params }).then((result) => {
+                const lastID = result.lastInsertRowid != null ? Number(result.lastInsertRowid) : 0;
+                if (callback) callback.call({ lastID }, null);
+            }).catch((err) => {
+                if (callback) callback(err);
+            });
+        },
+        get(sql, a, b) {
+            const params = typeof a === 'function' ? [] : a;
+            const callback = typeof a === 'function' ? a : b;
+            tursoClient.execute({ sql, args: params }).then((result) => {
+                if (callback) callback(null, result.rows[0] || undefined);
+            }).catch((err) => {
+                if (callback) callback(err);
+            });
+        },
+        all(sql, a, b) {
+            const params = typeof a === 'function' ? [] : a;
+            const callback = typeof a === 'function' ? a : b;
+            tursoClient.execute({ sql, args: params }).then((result) => {
+                if (callback) callback(null, result.rows || []);
+            }).catch((err) => {
+                if (callback) callback(err);
+            });
+        },
+        serialize(callback) {
+            callback();
+        },
+        close(callback) {
+            if (tursoClient.close) tursoClient.close();
+            if (callback) callback();
+        }
+    };
+    initializeDatabase();
+} else {
+    const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'restaurante.db');
+    console.log('Tentando conectar ao banco de dados em:', dbPath);
+    console.log('Diretório atual:', __dirname);
+    db = new sqlite3.Database(dbPath, (err) => {
+        if (err) {
+            console.error('❌ ERRO ao conectar ao banco de dados:', err.message);
+            console.error('Caminho tentado:', dbPath);
+        } else {
+            console.log('✅ Conectado ao banco de dados SQLite em:', dbPath);
+            initializeDatabase();
+        }
+    });
+}
+
+// Inicializar tabelas no PostgreSQL (Supabase)
+function initializeDatabasePostgres(pool) {
+    const run = (sql) => pool.query(sql).then(() => {}).catch((err) => console.error('Erro SQL:', err.message));
+    const tables = [
+        `CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS arrecadacao (
+            id SERIAL PRIMARY KEY,
+            data DATE NOT NULL,
+            valor REAL NOT NULL,
+            observacoes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS contas_fixas (
+            id SERIAL PRIMARY KEY,
+            nome TEXT NOT NULL,
+            valor REAL NOT NULL,
+            mes_referencia TEXT NOT NULL,
+            recorrencia_mensal INTEGER DEFAULT 1,
+            ativo INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS contas_semanais (
+            id SERIAL PRIMARY KEY,
+            nome TEXT NOT NULL,
+            valor REAL NOT NULL,
+            semana_referente TEXT NOT NULL,
+            descricao TEXT,
+            recorrencia_semanal INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS contas_diarias (
+            id SERIAL PRIMARY KEY,
+            nome TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data DATE NOT NULL,
+            descricao TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        `CREATE TABLE IF NOT EXISTS logs (
+            id SERIAL PRIMARY KEY,
+            usuario TEXT,
+            acao TEXT NOT NULL,
+            tabela TEXT,
+            registro_id INTEGER,
+            dados_anteriores TEXT,
+            dados_novos TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`
+    ];
+    console.log('Iniciando criação das tabelas (PostgreSQL)...');
+    tables.reduce((p, sql) => p.then(() => run(sql)), Promise.resolve()).then(() => {
+        console.log('✅ Tabelas PostgreSQL criadas/verificadas');
+    });
+}
+
+// Inicializar tabelas (SQLite / Turso)
 function initializeDatabase() {
     console.log('Iniciando criação das tabelas...');
     
@@ -874,6 +1040,12 @@ app.get('/api/dashboard', (req, res) => {
 
 // ========== ROTAS DE BACKUP ==========
 app.get('/api/backup', (req, res) => {
+    if (useTurso || useSupabase) {
+        return res.json({
+            message: 'Backup em arquivo não disponível com banco na nuvem. Os dados já estão persistidos.',
+            cloud: true
+        });
+    }
     const backupFile = `backup_${Date.now()}.db`;
     const source = './restaurante.db';
     const dest = `./backups/${backupFile}`;
@@ -960,12 +1132,14 @@ app.listen(PORT, () => {
 
 // Fechar banco ao encerrar
 process.on('SIGINT', () => {
-    db.close((err) => {
-        if (err) {
-            console.error(err.message);
-        }
-        console.log('Conexão com banco de dados fechada.');
+    if (db.close) {
+        db.close((err) => {
+            if (err) console.error(err.message);
+            console.log('Conexão com banco de dados fechada.');
+            process.exit(0);
+        });
+    } else {
         process.exit(0);
-    });
+    }
 });
 
