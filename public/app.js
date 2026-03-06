@@ -1434,6 +1434,9 @@ async function handleMobileQuickSubmit(e) {
             
             // Scroll para o topo
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+            const errData = await response.json().catch(() => ({}));
+            alert('Erro ao salvar: ' + (errData.error || response.statusText || 'Erro no servidor'));
         }
     } catch (error) {
         console.error('Erro ao salvar gasto:', error);
@@ -1471,7 +1474,12 @@ async function loadMobileRecentGastos() {
         const hoje = new Date().toISOString().slice(0, 10);
         const response = await apiRequest(`/contas-diarias?dia=${hoje}`);
         const data = await response.json();
-        
+        const recentList = document.getElementById('mobileRecentList');
+        if (!response.ok || !Array.isArray(data)) {
+            if (data && data.error) console.error('API contas-diarias:', data.error);
+            if (recentList) recentList.innerHTML = '<p style="text-align: center; color: var(--danger-color); padding: 1rem;">Erro ao carregar gastos.</p>';
+            return;
+        }
         // Filtrar apenas os de hoje
         const hojeData = data.filter(item => item.data === hoje);
         
@@ -1479,7 +1487,6 @@ async function loadMobileRecentGastos() {
         hojeData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         
         // Mostrar apenas os últimos 5
-        const recentList = document.getElementById('mobileRecentList');
         if (hojeData.length === 0) {
             recentList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 1rem;">Nenhum gasto lançado hoje</p>';
         } else {
@@ -1534,6 +1541,9 @@ async function handleDesktopQuickSubmit(e) {
             setTimeout(() => {
                 document.getElementById('desktopSuccessMsg').style.display = 'none';
             }, 3000);
+        } else {
+            const data = await response.json().catch(() => ({}));
+            alert('Erro ao salvar: ' + (data.error || response.statusText || 'Erro no servidor'));
         }
     } catch (error) {
         console.error('Erro ao salvar gasto:', error);
@@ -1546,7 +1556,10 @@ async function loadDesktopRecentGastos() {
         const hoje = new Date().toISOString().slice(0, 10);
         const response = await apiRequest(`/contas-diarias?dia=${hoje}`);
         const data = await response.json();
-        
+        if (!response.ok || !Array.isArray(data)) {
+            if (data && data.error) console.error('API contas-diarias:', data.error);
+            return;
+        }
         const hojeData = data.filter(item => item.data === hoje);
         hojeData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         

@@ -2,6 +2,8 @@
 
 **Boa opção se você não conseguiu instalar o Turso.** Tudo é feito **no navegador**; não precisa instalar CLI nem programas no PC.
 
+> **Quer subir o app na Vercel com Supabase?** Use o guia completo: **PASSO_A_PASSO_VERCEL_SUPABASE.md**.
+
 ---
 
 ## 1. Criar conta no Supabase
@@ -27,7 +29,8 @@
 1. No menu lateral, vá em **Project Settings** (ícone de engrenagem).
 2. Clique em **Database** no menu da esquerda.
 3. Role até **Connection string**.
-4. Escolha a aba **URI**.
+4. Escolha a aba **URI**.  
+   **Use a URL do Connection pooler** (porta **6543**), não a conexão direta (porta 5432). Se aparecer `db.xxx.supabase.co:5432`, no Supabase há outra opção (ex.: "Transaction" ou "Session pooler") com host `xxx.pooler.supabase.com:6543` – use essa para evitar erro de rede (ENETUNREACH) no Render.
 5. Copie a URL. Ela será algo como:
    ```text
    postgresql://postgres.[alguma-coisa]:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres

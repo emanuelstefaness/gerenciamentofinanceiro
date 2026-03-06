@@ -1,5 +1,4 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
@@ -31,7 +30,11 @@ function sqlToPg(sql) {
 
 if (useSupabase) {
     const { Pool } = require('pg');
-    const pgPool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
+    const pgPool = new Pool({
+        connectionString: databaseUrl,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 10000
+    });
     console.log('✅ Usando Supabase (PostgreSQL persistente na nuvem)');
 
     db = {
@@ -121,6 +124,7 @@ if (useSupabase) {
     };
     initializeDatabase();
 } else {
+    const sqlite3 = require('sqlite3').verbose();
     const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'restaurante.db');
     console.log('Tentando conectar ao banco de dados em:', dbPath);
     console.log('Diretório atual:', __dirname);
@@ -615,8 +619,10 @@ app.post('/api/contas-diarias', (req, res) => {
     db.run("INSERT INTO contas_diarias (nome, valor, data, descricao) VALUES (?, ?, ?, ?)",
         [nome, valor, data, descricao || null], function(err) {
             if (err) {
+                console.error('Erro INSERT contas_diarias:', err.message);
                 return res.status(500).json({ error: err.message });
             }
+            if (useSupabase) console.log('Conta diária criada no Supabase, id:', this.lastID);
             createLog('sistema', 'CREATE', 'contas_diarias', this.lastID, null, req.body);
             res.json({ id: this.lastID, message: 'Conta diária criada com sucesso' });
         });
@@ -963,15 +969,27 @@ app.get('/api/dashboard', (req, res) => {
 
     // Total arrecadado no mês
     db.get("SELECT COALESCE(SUM(valor), 0) as total FROM arrecadacao WHERE strftime('%Y-%m', data) = ?", [mesAtual], (err, row) => {
-        dashboard.totalArrecadado = row.total;
+        if (err) {
+            console.error('Erro dashboard arrecadacao:', err.message);
+            return res.status(500).json({ error: 'Erro ao carregar dashboard', detalhe: err.message });
+        }
+        dashboard.totalArrecadado = (row && row.total != null) ? parseFloat(row.total) : 0;
 
         // Total gasto no mês (contas fixas + semanais + diárias)
         db.get(`SELECT COALESCE(SUM(valor), 0) as total FROM contas_fixas WHERE mes_referencia = ? AND ativo = 1`, [mesAtual], (err, row) => {
-            const totalFixas = row.total;
+            if (err) {
+                console.error('Erro dashboard fixas:', err.message);
+                return res.status(500).json({ error: 'Erro ao carregar dashboard', detalhe: err.message });
+            }
+            const totalFixas = (row && row.total != null) ? parseFloat(row.total) : 0;
 
             // Para contas semanais, buscar todas e filtrar por mês no código
             // Formato semana_referente: YYYY-WW (ex: 2024-W15)
             db.all(`SELECT * FROM contas_semanais`, [], (err, semanaisRows) => {
+                if (err) {
+                    console.error('Erro dashboard semanais:', err.message);
+                    return res.status(500).json({ error: 'Erro ao carregar dashboard', detalhe: err.message });
+                }
                 const [anoAtual, mesAtualNum] = mesAtual.split('-');
                 const totalSemanais = (semanaisRows || []).filter(s => {
                     // Filtrar por ano primeiro
@@ -984,7 +1002,11 @@ app.get('/api/dashboard', (req, res) => {
                 }).reduce((sum, s) => sum + parseFloat(s.valor || 0), 0);
 
                 db.get(`SELECT COALESCE(SUM(valor), 0) as total FROM contas_diarias WHERE strftime('%Y-%m', data) = ?`, [mesAtual], (err, row) => {
-                    const totalDiarias = row.total;
+                    if (err) {
+                        console.error('Erro dashboard diarias:', err.message);
+                        return res.status(500).json({ error: 'Erro ao carregar dashboard', detalhe: err.message });
+                    }
+                    const totalDiarias = (row && row.total != null) ? parseFloat(row.total) : 0;
                     dashboard.totalGasto = totalFixas + totalSemanais + totalDiarias;
                     dashboard.lucroLiquido = dashboard.totalArrecadado - dashboard.totalGasto;
 
@@ -1122,24 +1144,26 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-    console.log('='.repeat(50));
-    console.log(`✅ Servidor rodando na porta ${PORT}`);
-    console.log(`✅ Acesse: http://localhost:${PORT}`);
-    console.log('='.repeat(50));
-});
-
-// Fechar banco ao encerrar
-process.on('SIGINT', () => {
-    if (db.close) {
-        db.close((err) => {
-            if (err) console.error(err.message);
-            console.log('Conexão com banco de dados fechada.');
+// Na Vercel não inicia o servidor; ela usa o export abaixo
+if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+        console.log('='.repeat(50));
+        console.log(`✅ Servidor rodando na porta ${PORT}`);
+        console.log(`✅ Acesse: http://localhost:${PORT}`);
+        console.log('='.repeat(50));
+    });
+    process.on('SIGINT', () => {
+        if (db && db.close) {
+            db.close((err) => {
+                if (err) console.error(err.message);
+                console.log('Conexão com banco de dados fechada.');
+                process.exit(0);
+            });
+        } else {
             process.exit(0);
-        });
-    } else {
-        process.exit(0);
-    }
-});
+        }
+    });
+}
+
+module.exports = app;
 
