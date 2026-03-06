@@ -27,6 +27,18 @@
     --sidebar-text: #f9fafb;
 }
 
+[data-theme="light"] {
+    --bg-color: #f1f5f9;
+    --card-bg: #ffffff;
+    --text-color: #0f172a;
+    --text-secondary: #475569;
+    --border-color: #e2e8f0;
+    --sidebar-bg: #0f172a;
+    --sidebar-text: #f8fafc;
+    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -34,10 +46,12 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-color);
+    min-height: 100vh;
     transition: background-color 0.3s, color 0.3s;
+    line-height: 1.5;
 }
 
 /* Main App */
@@ -169,6 +183,7 @@ body {
     padding: 2rem;
     width: calc(100% - 250px);
     min-height: 100vh;
+    background-color: var(--bg-color);
 }
 
 .page {
@@ -188,10 +203,11 @@ body {
 .card {
     background: var(--card-bg);
     padding: 1.5rem;
-    border-radius: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
     box-shadow: var(--shadow);
     margin-bottom: 1.5rem;
-    transition: box-shadow 0.3s;
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .card:hover {
@@ -558,7 +574,7 @@ table tbody tr:last-child td {
 .form-group-mobile textarea:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    box-shadow: 0 0 0 3px rgba(20, 83, 45, 0.25);
 }
 
 .form-group-mobile input[type="number"] {
